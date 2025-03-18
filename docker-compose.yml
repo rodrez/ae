@@ -1,0 +1,79 @@
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:14-alpine
+    container_name: aepg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ae
+      PGDATA: /data/postgres
+    volumes:
+      - postgres-data:/data/postgres
+    ports:
+      - "5432:5432"
+    networks:
+      - ae-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and real-time data
+  redis:
+    image: redis:7-alpine
+    container_name: aeredis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass redis
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - ae-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Game server - simple version
+  server:
+    image: node:20-alpine
+    container_name: aeserver
+    restart: unless-stopped
+    working_dir: /app
+    env_file:
+      - ./server/.env
+    environment:
+      - NODE_ENV=development
+      - DEBUG=1
+    ports:
+      - "3000:3000"
+    networks:
+      - ae-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./server:/app
+    command: >
+      sh -c "
+        apk add --no-cache python3 make g++ && 
+        npm install -g pnpm && 
+        pnpm install --force &&
+        pnpm exec tsx src/app-simple.ts
+      "
+
+networks:
+  ae-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  server-node-modules: 

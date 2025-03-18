@@ -1,0 +1,114 @@
+### Guidelines for Each Directory
+
+- Stack:
+  - phaser
+  - fastify
+  - drizzle
+  - postgres
+  - redis
+  - typescript
+  - vite
+  - docker
+
+- **Client:**
+  - **`public/`:** Place static files such as `index.html`, images, and other assets.
+  - **`src/`:** Organize your game code into subdirectories:
+    - `assets/` for images, audio, and other media.
+    - `scenes/` for Phaser scenes (game levels, dungeons, etc.).
+    - `ui/` for user interface components.
+    - `utils/` for helper functions and common utilities.
+  - **Configuration Files:** `package.json` and `vite.config.ts` manage dependencies and build processes.
+
+- **Services:**
+  - Each service (e.g., `auth-service`, `world-service`, etc.) should have:
+    - **`src/`:**  
+      - `controllers/`: Fastify route handlers.
+      - `models/`: Data models (using Drizzle ORM for Postgres where applicable).
+      - `routes/`: API route definitions.
+      - `services/`: Business logic specific to the service.
+    - **`config/`:** Environment-specific configurations (e.g., API keys, database URLs).
+    - **`db/`:** Database migration and seed scripts.
+    - **`tests/`:** Unit and integration tests for the service.
+    - **Dockerfile:** Containerization instructions.
+    - **`package.json`:** Service-specific dependencies and scripts.
+
+- **Common:**
+  - **`utils/`:** Shared helper functions.
+  - **`types/`:** Shared type definitions (if using TypeScript) and interfaces.
+
+## 4. Coding Style Guidelines
+
+### General Principles
+- **Consistency:** Maintain consistency in code style and naming conventions.
+- **Modularity:** Follow the Single Responsibility Principle. Each module or service should have one clear purpose.
+- **Documentation:** Use clear, descriptive comments and JSDoc (or similar) for functions and modules.
+
+### Naming Conventions
+- **Files and Directories:** Use kebab-case (e.g., `auth-service`).
+- **Variables and Functions:** Use camelCase.
+- **Classes and Constructors:** Use PascalCase.
+
+### Formatting & Linting
+- **Linting:** Use ESLint with Airbnb’s style guide (or an agreed variant) to enforce code quality.
+- **Formatting:** Use Prettier to maintain a consistent code format across the project.
+- **Editor Config:** Consider including an `.editorconfig` file to maintain consistent editor settings.
+
+## 5. API and Communication Guidelines
+
+- **RESTful Design:** Use RESTful conventions for your Fastify APIs.
+- **Data Validation:** Validate incoming data using Fastify’s schema validation or libraries like `@hapi/joi`.
+- **Versioning:** Version your APIs to ensure backward compatibility.
+- **Error Handling:** Implement robust error handling. Ensure that error responses do not expose sensitive internal details.
+
+## 6. Testing Guidelines
+
+- **Unit Testing:** Write unit tests for all critical functions and modules.
+- **Integration Testing:** Test interactions between services, especially API endpoints and database operations.
+- **Coverage:** Aim for high test coverage. Set up automated test runs in your CI/CD pipeline.
+- **Test Organization:** Keep tests alongside the code in a dedicated `tests/` folder within each service.
+
+## 7. Docker & Deployment Guidelines
+
+- **Dockerization:** Each microservice must include a `Dockerfile`. Use docker-compose at the root level to orchestrate all services along with Redis and Postgres.
+- **Environment Variables:** Store sensitive configuration data in environment variables. Use `.env` files and ensure they are not committed to version control.
+- **CI/CD:** Automate builds, tests, and deployments using a CI/CD tool (e.g., GitHub Actions).
+
+## 8. Version Control and Collaboration
+
+- **Branching:**  
+  - Use feature branches for new features.
+  - Merge into a develop branch after code review.
+  - Only merge stable, production-ready code into the main/master branch.
+- **Commit Messages:**  
+  - Write clear, descriptive commit messages.
+  - Consider following Conventional Commits for consistency (e.g., `feat: add new dungeon mechanics`).
+
+## 9. Documentation
+
+- **Code Documentation:**  
+  - Document functions, classes, and modules using JSDoc or a similar format.
+  - Include inline comments for complex logic.
+- **Project Documentation:**  
+  - Maintain an up-to-date README.md that explains the project setup, tech stack, and how to contribute.
+  - Use this guidelines document (`PROJECT_GUIDELINES.md`) as a reference for best practices.
+- **Change Log:**  
+  - Keep a change log (e.g., in `CHANGELOG.md`) to track major updates and decisions.
+
+## 10. Best Practices
+
+- **Security:**  
+  - Sanitize and validate all user inputs.
+  - Use secure authentication methods and manage secrets carefully.
+- **Scalability:**  
+  - Design microservices to be independently scalable.
+  - Profile performance-critical parts of your code, especially the game loop and API endpoints.
+- **Code Reviews:**  
+  - All changes should be peer-reviewed.
+  - Encourage feedback and discussions around code improvements.
+- **Continuous Improvement:**  
+  - Regularly revisit and update guidelines as new best practices or technologies emerge.
+
+---
+
+By following these guidelines, we ensure that Alternate Earth is built with a clean, consistent, and scalable codebase that leverages our chosen tech stack efficiently.
+

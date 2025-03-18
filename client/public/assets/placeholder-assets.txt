@@ -1,0 +1,17 @@
+The following assets need to be created for the game to work:
+
+1. logo.png - A logo for the game (512x512)
+2. loading-bar.png - Loading bar foreground (400x30)
+3. loading-bar-bg.png - Loading bar background (400x30)
+4. button.png - Button image (200x60)
+5. world-bg.jpg - World background (1280x720)
+6. character.png - Character spritesheet (128x192) containing 4 rows of 4 frames each:
+   - Row 1: Walking down animation (4 frames)
+   - Row 2: Walking up animation (4 frames)
+   - Row 3: Walking left animation (4 frames)
+   - Row 4: Walking right animation (4 frames)
+7. player.png - Single player image (32x48)
+8. other-player.png - Other player image (32x48)
+9. tileset.png - Tile set for the world (512x512)
+
+You can create these assets using any image editor or download placeholder graphics. 

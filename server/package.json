@@ -1,0 +1,42 @@
+{
+	"name": "alternate-earth-server",
+	"version": "1.0.0",
+	"description": "Alternate Earth MMO Game Server",
+	"main": "dist/app.js",
+	"packageManager": "pnpm@10.6.4",
+	"scripts": {
+		"dev": "tsx watch src/app.ts",
+		"build": "tsc",
+		"start": "node dist/app.js",
+		"test": "jest",
+		"migrate": "drizzle-kit push:pg",
+		"studio": "drizzle-kit studio"
+	},
+	"dependencies": {
+		"@fastify/cors": "^9.0.0",
+		"@fastify/jwt": "^8.0.0",
+		"@fastify/redis": "^6.1.1",
+		"@fastify/type-provider-typebox": "^3.5.0",
+		"@fastify/websocket": "^8.3.1",
+		"@sinclair/typebox": "^0.32.15",
+		"argon2": "^0.41.1",
+		"dotenv": "^16.4.5",
+		"drizzle-orm": "^0.29.3",
+		"fastify": "^4.26.1",
+		"pino-pretty": "^10.3.1",
+		"postgres": "^3.4.3",
+		"redis": "^4.6.13",
+		"ws": "^8.18.1",
+		"zod": "^3.22.4"
+	},
+	"devDependencies": {
+		"@types/ioredis": "^5.0.0",
+		"@types/jest": "^29.5.12",
+		"@types/node": "^20.11.24",
+		"@types/ws": "^8.5.10",
+		"drizzle-kit": "^0.20.14",
+		"jest": "^29.7.0",
+		"tsx": "^4.7.1",
+		"typescript": "^5.3.3"
+	}
+}
