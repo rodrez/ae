@@ -5,6 +5,7 @@ export class OtherPlayer extends Phaser.Physics.Arcade.Sprite {
   private targetX: number;
   private targetY: number;
   private lerp = 0.1; // Smoothing factor for movement
+  private uniqueColor: number;
 
   constructor(scene: Phaser.Scene, x: number, y: number, texture: string, name: string) {
     super(scene, x, y, texture);
@@ -13,25 +14,30 @@ export class OtherPlayer extends Phaser.Physics.Arcade.Sprite {
     this.targetX = x;
     this.targetY = y;
     
+    // Generate a unique color based on the player name
+    this.uniqueColor = this.generateColorFromName(name);
+    
+    // Apply tint to visually distinguish this player
+    this.setTint(this.uniqueColor);
+    
     // Play idle animation
     this.anims.play('idle');
     
-    // Create floating name tag
+    // Create floating name tag with unique color
+    const hexColor = '#' + this.uniqueColor.toString(16).padStart(6, '0');
     this.nameText = scene.add.text(x, y - 40, name, {
       fontSize: '16px',
-      color: '#ffffff',
+      color: hexColor,
       stroke: '#000000',
-      strokeThickness: 3
+      strokeThickness: 3,
+      fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(11);
     
     // Set depth to ensure rendering above most objects
     this.setDepth(10);
     
     // Set alpha to distinguish from main player
-    this.setAlpha(0.8);
-    
-    // Add tint to other players to distinguish them
-    this.setTint(0x00ffff);
+    this.setAlpha(0.9);
     
     // Set up update method to be called every frame
     scene.events.on('update', this.update, this);
@@ -41,6 +47,52 @@ export class OtherPlayer extends Phaser.Physics.Arcade.Sprite {
       scene.events.off('update', this.update, this);
       if (this.nameText) this.nameText.destroy();
     });
+  }
+  
+  private generateColorFromName(name: string): number {
+    // Generate a consistent color based on the player name
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    
+    // Create a pastel-ish color (avoiding yellow which is used for the local player)
+    const h = Math.abs(hash) % 360;
+    const s = 50 + (Math.abs(hash >> 3) % 30); // 50-80% saturation
+    const l = 60 + (Math.abs(hash >> 6) % 15); // 60-75% lightness
+    
+    return this.hslToRgb(h, s, l);
+  }
+  
+  private hslToRgb(h: number, s: number, l: number): number {
+    h /= 360;
+    s /= 100;
+    l /= 100;
+    
+    let r, g, b;
+    
+    if (s === 0) {
+      r = g = b = l; // achromatic
+    } else {
+      const hue2rgb = (p: number, q: number, t: number) => {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1/6) return p + (q - p) * 6 * t;
+        if (t < 1/2) return q;
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        return p;
+      };
+      
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      r = hue2rgb(p, q, h + 1/3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1/3);
+    }
+    
+    // Convert RGB components to 0-255 range and then to hex
+    const toHex = (c: number) => Math.round(c * 255);
+    return (toHex(r) << 16) + (toHex(g) << 8) + toHex(b);
   }
 
   updatePosition(x: number, y: number): void {

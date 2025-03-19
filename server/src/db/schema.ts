@@ -19,7 +19,7 @@ export const characters = pgTable('characters', {
   health: integer('health').default(100),
   mana: integer('mana').default(100),
   inventory: jsonb('inventory').$type<{ items: any[] }>().default({ items: [] }),
-  position: jsonb('position').$type<{ x: number, y: number, z: number }>(),
+  position: jsonb('position').$type<{ x: number, y: number, z: number }>().default({ x: 0, y: 0, z: 0 }),
   lastSaved: timestamp('last_saved').defaultNow(),
 });
 

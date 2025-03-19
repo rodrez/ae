@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
-import { Boot } from './scenes/Boot';
-import { Preload } from './scenes/Preload';
-import { MainMenu } from './scenes/MainMenu';
-import { Game } from './scenes/Game';
+import { Boot } from './scenes/boot';
+import { Preload } from './scenes/preload';
+import { MainMenu } from './scenes/main-menu';
+import { Game } from './scenes/game';
 import { GameConfig } from './config';
 
 // Game configuration

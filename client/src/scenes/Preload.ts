@@ -16,8 +16,8 @@ export class Preload extends Phaser.Scene {
 
     // Load game assets
     this.load.image('tileset', 'tileset.png');
-    this.load.image('player', 'player.png');
-    this.load.image('other-player', 'other-player.png');
+    this.load.image('player', 'characters/player.png');
+    this.load.image('other-player', 'characters/other-player.png');
     this.load.image('button', 'button.png');
     this.load.image('world-bg', 'world-bg.jpg');
     

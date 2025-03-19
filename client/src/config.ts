@@ -6,9 +6,17 @@ export const GameConfig = {
   // Debug mode
   debug: false,
   
+  // WebSocket settings
+  websocket: {
+    reconnectAttempts: 5,  // How many times to try reconnecting
+    reconnectDelay: 3000,  // Base delay between reconnect attempts (ms)
+    timeout: 30000,        // Connection timeout (ms)
+    debug: true            // Enable WebSocket debug logging
+  },
+  
   // Game settings
-  worldWidth: 5000,
-  worldHeight: 5000,
+  worldWidth: 1600,
+  worldHeight: 1200,
   
   // Player settings
   playerSpeed: 200,

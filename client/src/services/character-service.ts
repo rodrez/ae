@@ -3,23 +3,33 @@ import { GameConfig } from '../config';
 
 export interface Character {
   id: number;
+  userId: number;
   name: string;
-  level: number;
-  experience: number;
-  health: number;
-  mana: number;
   position: {
     x: number;
     y: number;
     z: number;
   };
+  createdAt: string;
+  updatedAt: string;
 }
 
 export class CharacterService {
   private baseUrl: string;
+  private api: any;
   
   constructor() {
-    this.baseUrl = GameConfig.apiUrl;
+    // Use the proxy through Vite for development instead of direct connection
+    this.baseUrl = '/api';
+    
+    // Create an Axios instance with CORS configuration
+    this.api = axios.create({
+      baseURL: this.baseUrl,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      withCredentials: true, // Important for CORS with credentials
+    });
   }
   
   private getAuthHeaders() {
@@ -27,24 +37,25 @@ export class CharacterService {
     return {
       headers: {
         Authorization: `Bearer ${token}`
-      }
+      },
+      withCredentials: true
     };
   }
   
   async getCharacters(): Promise<Character[]> {
     try {
-      const response = await axios.get(`${this.baseUrl}/characters`, this.getAuthHeaders());
+      const response = await this.api.get('/characters', this.getAuthHeaders());
       return response.data;
     } catch (error) {
-      console.error('Error getting characters:', error);
-      throw new Error('Failed to get characters');
+      console.error('Error fetching characters:', error);
+      throw new Error('Failed to fetch characters');
     }
   }
   
   async createCharacter(name: string): Promise<Character> {
     try {
-      const response = await axios.post(
-        `${this.baseUrl}/characters`,
+      const response = await this.api.post(
+        '/characters',
         { name },
         this.getAuthHeaders()
       );
