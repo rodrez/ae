@@ -24,4 +24,17 @@ export const GameConfig = {
   // UI settings
   fontSize: 16,
   fontFamily: 'Arial',
+  
+  // Map settings
+  map: {
+    defaultCenter: { lat: 37.7749, lng: -122.4194 }, // Default center (San Francisco)
+    defaultZoom: 1,
+    metersPerPixel: 10, // How many meters each pixel represents
+    updateDistance: 200, // Distance in meters before triggering a map update
+    entityRadius: 1000, // Radius in meters to check for entities
+    flags: {
+      captureRadius: 500, // Radius in meters to capture a flag
+      territoryRadius: 600 // Radius in meters for territory control
+    }
+  }
 }; 

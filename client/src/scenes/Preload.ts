@@ -20,6 +20,14 @@ export class Preload extends Phaser.Scene {
     this.load.image('other-player', 'characters/other-player.png');
     this.load.image('button', 'button.png');
     this.load.image('world-bg', 'world-bg.jpg');
+    this.load.image('world-map', 'world-map.png');
+    
+    // Load map entity assets
+    this.load.image('flag', 'entities/flag.png');
+    this.load.image('dungeon', 'entities/dungeon.png');
+    this.load.image('monster', 'entities/monster.png');
+    this.load.image('marketplace', 'entities/marketplace.png');
+    this.load.image('house', 'entities/house.png');
     
     // Load spritesheets
     this.load.spritesheet('character', 'characters/player.png', { 

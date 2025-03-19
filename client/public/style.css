@@ -1,8 +1,10 @@
 body {
     margin: 0;
     padding: 0;
-    color: rgba(255, 255, 255, 0.87);
-    background-color: #000000;
+    overflow: hidden;
+    background-color: #000;
+    color: #fff;
+    font-family: Arial, Helvetica, sans-serif;
 }
 
 #app {
@@ -12,4 +14,85 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
+}
+
+#game {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+canvas {
+    display: block;
+    background: transparent !important;
+}
+
+/* Leaflet customization */
+#leaflet-map-container {
+    z-index: 0;
+}
+
+/* Ensure Phaser's canvas is above Leaflet but allows interaction with both */
+canvas {
+    position: relative;
+    z-index: 1;
+    pointer-events: none; /* Allows clicking through to Leaflet map */
+}
+
+/* Make specific Phaser UI elements clickable */
+.clickable {
+    pointer-events: auto !important;
+}
+
+/* Entity popup styling */
+.entity-popup {
+    color: #000;
+    padding: 8px;
+    max-width: 200px;
+}
+
+.entity-popup h3 {
+    margin: 0 0 8px 0;
+    color: #2c3e50;
+    font-size: 16px;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 4px;
+}
+
+.entity-popup p {
+    margin: 4px 0;
+    font-size: 14px;
+}
+
+.entity-popup button {
+    margin-top: 8px;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.entity-popup button:hover {
+    background-color: #2980b9;
+}
+
+/* Make Leaflet controls more visible */
+.leaflet-control-zoom {
+    display: none; /* We'll use our own zoom controls */
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+    background-color: rgba(255, 255, 255, 0.9);
+}
+
+/* Make sure the tooltips are visible through the canvas */
+.leaflet-tooltip {
+    z-index: 10;
 }
