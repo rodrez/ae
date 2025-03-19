@@ -23,8 +23,8 @@ export class Preload extends Phaser.Scene {
     
     // Load spritesheets
     this.load.spritesheet('character', 'characters/player.png', { 
-      frameWidth: 32, 
-      frameHeight: 32 
+      frameWidth: 48, 
+      frameHeight: 48 
     });
 
     // Loading UI progress
@@ -62,40 +62,55 @@ export class Preload extends Phaser.Scene {
   }
 
   private createAnimations() {
-    // Player animations
+    // Player animations based on README.txt
+    // [0-2] idle, [3-5] move, [6-8] attack, [9] death
     this.anims.create({
       key: 'idle',
-      frames: this.anims.generateFrameNumbers('character', { start: 0, end: 3 }),
+      frames: this.anims.generateFrameNumbers('character', { start: 0, end: 2 }),
       frameRate: 8,
       repeat: -1
     });
 
     this.anims.create({
       key: 'walk-down',
-      frames: this.anims.generateFrameNumbers('character', { start: 0, end: 3 }),
+      frames: this.anims.generateFrameNumbers('character', { start: 3, end: 5 }),
       frameRate: 8,
       repeat: -1
     });
 
     this.anims.create({
       key: 'walk-up',
-      frames: this.anims.generateFrameNumbers('character', { start: 4, end: 7 }),
+      frames: this.anims.generateFrameNumbers('character', { start: 3, end: 5 }),
       frameRate: 8,
       repeat: -1
     });
 
     this.anims.create({
       key: 'walk-left',
-      frames: this.anims.generateFrameNumbers('character', { start: 8, end: 11 }),
+      frames: this.anims.generateFrameNumbers('character', { start: 3, end: 5 }),
       frameRate: 8,
       repeat: -1
     });
 
     this.anims.create({
       key: 'walk-right',
-      frames: this.anims.generateFrameNumbers('character', { start: 12, end: 15 }),
+      frames: this.anims.generateFrameNumbers('character', { start: 3, end: 5 }),
       frameRate: 8,
       repeat: -1
+    });
+
+    this.anims.create({
+      key: 'attack',
+      frames: this.anims.generateFrameNumbers('character', { start: 6, end: 8 }),
+      frameRate: 10,
+      repeat: 0
+    });
+
+    this.anims.create({
+      key: 'death',
+      frames: this.anims.generateFrameNumbers('character', { start: 9, end: 9 }),
+      frameRate: 5,
+      repeat: 0
     });
   }
 } 

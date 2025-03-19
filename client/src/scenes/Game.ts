@@ -19,6 +19,8 @@ export class Game extends Phaser.Scene {
     private connectionStatusText!: Phaser.GameObjects.Text;
     private playerCountText!: Phaser.GameObjects.Text;
     private playerCount: number = 0;
+    private failedUpdates: number = 0;
+    private lastErrorTime: number = 0;
 
     constructor() {
         super('Game');
@@ -34,7 +36,9 @@ export class Game extends Phaser.Scene {
         this.createUI();
 
         // Set up controls
-        this.cursors = this.input.keyboard.createCursorKeys();
+        if (this.input && this.input.keyboard) {
+            this.cursors = this.input.keyboard.createCursorKeys();
+        }
 
         try {
             // Initialize WebSocket connection
@@ -211,12 +215,6 @@ export class Game extends Phaser.Scene {
     private async updatePlayerPosition() {
         if (!this.player || !this.characterId) return;
         
-        // Use class-level variables to track position update failures
-        if (typeof this.updatePlayerPosition.failedUpdates === 'undefined') {
-            this.updatePlayerPosition.failedUpdates = 0;
-            this.updatePlayerPosition.lastErrorTime = 0;
-        }
-        
         const now = Date.now();
         
         try {
@@ -227,7 +225,7 @@ export class Game extends Phaser.Scene {
             );
             
             // Reset failed updates counter on success
-            this.updatePlayerPosition.failedUpdates = 0;
+            this.failedUpdates = 0;
             
             // Clear any error status if it was showing
             if (this.connectionStatusText.text.includes('failed')) {
@@ -237,18 +235,18 @@ export class Game extends Phaser.Scene {
             console.error('Failed to update position:', error);
             
             // Increment failed updates counter
-            this.updatePlayerPosition.failedUpdates++;
-            this.updatePlayerPosition.lastErrorTime = now;
+            this.failedUpdates++;
+            this.lastErrorTime = now;
             
             // Only show error message if we've had multiple failures
-            if (this.updatePlayerPosition.failedUpdates >= 3) {
+            if (this.failedUpdates >= 3) {
                 this.updateConnectionStatus(
                     false, 
-                    `Position updates failing (${this.updatePlayerPosition.failedUpdates}). Game continues locally.`
+                    `Position updates failing (${this.failedUpdates}). Game continues locally.`
                 );
                 
                 // After many failures, try to reconnect websocket
-                if (this.updatePlayerPosition.failedUpdates >= 10 && this.updatePlayerPosition.failedUpdates % 5 === 0) {
+                if (this.failedUpdates >= 10 && this.failedUpdates % 5 === 0) {
                     try {
                         await this.gameService.initialize();
                         console.log('Attempted websocket reconnection');

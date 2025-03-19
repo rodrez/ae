@@ -49,7 +49,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     });
   }
 
-  update(cursors: Phaser.Types.Input.Keyboard.CursorKeys) {
+  update(cursors: Phaser.Types.Input.Keyboard.CursorKeys | null) {
     if (!cursors) return;
 
     let vx = 0;
@@ -82,7 +82,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Update animations based on movement
     if (isMoving) {
       if (!this.moving || this.direction !== newDirection) {
-        this.anims.play(`walk-${newDirection}`, true);
+        // For left/right movement, we use walk animation and flip the sprite
+        if (newDirection === 'left') {
+          this.flipX = true;
+          this.anims.play('walk-down', true);
+        } else if (newDirection === 'right') {
+          this.flipX = false;
+          this.anims.play('walk-down', true);
+        } else {
+          // For up/down we use the appropriate animation without flipping
+          this.flipX = false;
+          this.anims.play(`walk-${newDirection}`, true);
+        }
       }
       this.moving = true;
       this.direction = newDirection;

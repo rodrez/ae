@@ -102,11 +102,17 @@ export class OtherPlayer extends Phaser.Physics.Arcade.Sprite {
     // If the player moved, determine which animation to play
     if (Math.abs(this.x - x) > Math.abs(this.y - y)) {
       if (this.x > x) {
-        this.anims.play('walk-left', true);
+        // Moving left
+        this.flipX = true;
+        this.anims.play('walk-down', true);
       } else {
-        this.anims.play('walk-right', true);
+        // Moving right
+        this.flipX = false;
+        this.anims.play('walk-down', true);
       }
     } else {
+      // Reset flip for up/down movement
+      this.flipX = false;
       if (this.y > y) {
         this.anims.play('walk-up', true);
       } else {
