@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { GameConfig } from '../config';
 import { WebSocketService } from './websocket-service';
 
 export interface PlayerData {
@@ -135,9 +134,9 @@ export class GameService {
   ): Promise<void> {
     try {
       // Ensure we have valid position values
-      const validX = typeof x === 'number' && !isNaN(x) ? x : 0;
-      const validY = typeof y === 'number' && !isNaN(y) ? y : 0;
-      const validZ = typeof z === 'number' && !isNaN(z) ? z : 0;
+      const validX = typeof x === 'number' && Number.isNaN(x) ? x : 0;
+      const validY = typeof y === 'number' && Number.isNaN(y) ? y : 0;
+      const validZ = typeof z === 'number' && Number.isNaN(z) ? z : 0;
       
       // For graceful degradation, track position in memory even if server updates fail
       const position = { x: validX, y: validY, z: validZ };
@@ -184,7 +183,7 @@ export class GameService {
     }
   }
   
-  async getNearbyPlayers(characterId: number, radius: number = 100): Promise<NearbyPlayersResponse> {
+  async getNearbyPlayers(characterId: number, radius = 100): Promise<NearbyPlayersResponse> {
     try {
       const response = await this.api.get(
         `/game/nearby?characterId=${characterId}&radius=${radius}`,

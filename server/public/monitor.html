@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alternate Earth - WebSocket Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+  <style>
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .animate-pulse-slow {
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+  </style>
+</head>
+<body class="bg-gray-900 text-white">
+  <div class="container mx-auto px-4 py-8">
+    <header class="mb-8">
+      <div class="flex items-center justify-between">
+        <h1 class="text-3xl font-bold">Alternate Earth <span class="text-emerald-400">WebSocket Monitor</span></h1>
+        <div class="flex items-center">
+          <div id="connection-status" class="flex items-center">
+            <div class="h-3 w-3 rounded-full bg-red-500 mr-2"></div>
+            <span id="status-text">Disconnected</span>
+          </div>
+          <button id="connect-btn" class="ml-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded">
+            Connect
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Connection Stats Panel -->
+      <div class="bg-gray-800 rounded-lg shadow-lg p-6">
+        <h2 class="text-xl font-semibold mb-4 text-emerald-400">Server Stats</h2>
+        <div class="space-y-4">
+          <div class="flex justify-between items-center">
+            <span class="text-gray-300">Active Connections:</span>
+            <span id="active-connections" class="font-mono bg-gray-700 px-3 py-1 rounded">0</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-gray-300">Characters Online:</span>
+            <span id="characters-online" class="font-mono bg-gray-700 px-3 py-1 rounded">0</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-gray-300">Latency:</span>
+            <span id="latency" class="font-mono bg-gray-700 px-3 py-1 rounded">0 ms</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-gray-300">Messages Received:</span>
+            <span id="messages-received" class="font-mono bg-gray-700 px-3 py-1 rounded">0</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-gray-300">Messages Sent:</span>
+            <span id="messages-sent" class="font-mono bg-gray-700 px-3 py-1 rounded">0</span>
+          </div>
+          <div class="mt-4">
+            <button id="refresh-stats-btn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded" disabled>
+              Refresh Stats
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Authentication Panel -->
+      <div class="bg-gray-800 rounded-lg shadow-lg p-6">
+        <h2 class="text-xl font-semibold mb-4 text-emerald-400">Authentication</h2>
+        <form id="auth-form" class="space-y-4">
+          <div>
+            <label class="block text-gray-300 mb-1" for="server-url">Server URL</label>
+            <input id="server-url" type="text" value="http://localhost:3000" class="w-full bg-gray-700 border border-gray-600 rounded py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+          <div>
+            <label class="block text-gray-300 mb-1" for="character-id">Character ID</label>
+            <input id="character-id" type="number" value="12345" class="w-full bg-gray-700 border border-gray-600 rounded py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+          <div>
+            <label class="block text-gray-300 mb-1" for="character-name">Character Name</label>
+            <input id="character-name" type="text" value="TestPlayer" class="w-full bg-gray-700 border border-gray-600 rounded py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+          <div>
+            <label class="block text-gray-300 mb-1" for="auth-token">Auth Token (Optional)</label>
+            <input id="auth-token" type="text" placeholder="Leave blank if not required" class="w-full bg-gray-700 border border-gray-600 rounded py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+          <div class="pt-2">
+            <button type="submit" id="auth-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" disabled>
+              Authenticate
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Test Actions Panel -->
+      <div class="bg-gray-800 rounded-lg shadow-lg p-6">
+        <h2 class="text-xl font-semibold mb-4 text-emerald-400">Test Actions</h2>
+        <div class="space-y-4">
+          <div>
+            <button id="ping-btn" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded mb-2" disabled>
+              Send Ping
+            </button>
+          </div>
+          <div>
+            <button id="movement-btn" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded mb-2" disabled>
+              Send Random Movement
+            </button>
+          </div>
+          <div>
+            <button id="action-btn" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded mb-2" disabled>
+              Send Action
+            </button>
+          </div>
+          <div class="pt-2">
+            <label class="block text-gray-300 mb-1" for="chat-message">Chat Message</label>
+            <div class="flex">
+              <input id="chat-message" type="text" placeholder="Hello world!" class="flex-1 bg-gray-700 border border-gray-600 rounded-l py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              <button id="chat-btn" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-r" disabled>
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log and Visualization Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+      <!-- Event Log -->
+      <div class="bg-gray-800 rounded-lg shadow-lg p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-xl font-semibold text-emerald-400">Event Log</h2>
+          <button id="clear-log-btn" class="text-xs bg-gray-700 hover:bg-gray-600 text-white font-bold py-1 px-2 rounded">
+            Clear
+          </button>
+        </div>
+        <div id="event-log" class="bg-gray-900 rounded p-4 h-80 overflow-y-auto font-mono text-sm">
+          <div class="text-gray-500">Waiting for events...</div>
+        </div>
+      </div>
+
+      <!-- Player Map -->
+      <div class="bg-gray-800 rounded-lg shadow-lg p-6">
+        <h2 class="text-xl font-semibold mb-4 text-emerald-400">Player Map</h2>
+        <div id="player-map" class="bg-gray-900 rounded p-4 h-80 relative overflow-hidden">
+          <!-- Grid lines -->
+          <div class="absolute inset-0 grid grid-cols-10 grid-rows-10">
+            <div class="col-span-full border-b border-gray-800"></div>
+            <div class="col-span-full border-b border-gray-800"></div>
+            <div class="col-span-full border-b border-gray-800"></div>
+            <div class="col-span-full border-b border-gray-800"></div>
+            <div class="col-span-full border-b border-gray-800"></div>
+            <div class="col-span-full border-b border-gray-800"></div>
+            <div class="col-span-full border-b border-gray-800"></div>
+            <div class="col-span-full border-b border-gray-800"></div>
+            <div class="col-span-full border-b border-gray-800"></div>
+            <div class="col-span-full border-b border-gray-800"></div>
+          </div>
+          <div class="absolute inset-0 grid grid-rows-10 grid-cols-10">
+            <div class="row-span-full border-r border-gray-800"></div>
+            <div class="row-span-full border-r border-gray-800"></div>
+            <div class="row-span-full border-r border-gray-800"></div>
+            <div class="row-span-full border-r border-gray-800"></div>
+            <div class="row-span-full border-r border-gray-800"></div>
+            <div class="row-span-full border-r border-gray-800"></div>
+            <div class="row-span-full border-r border-gray-800"></div>
+            <div class="row-span-full border-r border-gray-800"></div>
+            <div class="row-span-full border-r border-gray-800"></div>
+            <div class="row-span-full border-r border-gray-800"></div>
+          </div>
+          <!-- Legend -->
+          <div class="absolute bottom-2 left-2 bg-gray-800 bg-opacity-80 p-2 rounded text-xs">
+            <div class="flex items-center mb-1">
+              <div class="h-3 w-3 rounded-full bg-emerald-500 mr-2"></div>
+              <span>You</span>
+            </div>
+            <div class="flex items-center">
+              <div class="h-3 w-3 rounded-full bg-blue-500 mr-2"></div>
+              <span>Other Players</span>
+            </div>
+          </div>
+          <!-- Player dots will be added here dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/monitor.js"></script>
+</body>
+</html> 

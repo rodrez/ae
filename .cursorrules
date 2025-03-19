@@ -9,6 +9,7 @@
   - typescript
   - vite
   - docker
+  - pnpm (package manager)
 
 - **Client:**
   - **`public/`:** Place static files such as `index.html`, images, and other assets.

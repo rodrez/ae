@@ -1,5 +1,4 @@
-import axios from 'axios';
-import { GameConfig } from '../config';
+import axios, { AxiosInstance } from 'axios';
 
 export interface AuthResponse {
   token: string;
@@ -11,7 +10,7 @@ export interface AuthResponse {
 
 export class AuthService {
   private baseUrl: string;
-  private api: any;
+  private api: AxiosInstance;
   
   constructor() {
     // Use the proxy through Vite for development instead of direct connection

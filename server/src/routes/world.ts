@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { db } from "../app";
+import { db } from "../db";
 import { gameObjects } from "../db/schema";
 
 export async function worldRoutes(app: FastifyInstance) {

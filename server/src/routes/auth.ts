@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import argon2 from 'argon2';
-import { db } from '../app';
+import { db } from '../db';
 import { users } from '../db/schema';
 import { eq } from 'drizzle-orm';
 

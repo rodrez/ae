@@ -19,7 +19,7 @@ mmo-project/
 │   │   ├── routes/             # API route definitions
 │   │   ├── services/           # Business logic (including Redis caching)
 │   │   ├── utils/              # Utility functions (logging, error handling, etc.)
-│   │   └── app.ts              # Express or similar server initialization
+│   │   └── server.ts           # Fastify server initialization
 │   ├── tests/                  # Server-side tests
 │   ├── Dockerfile              # Dockerfile to build the server container
 │   ├── package.json            # Server-specific dependencies & scripts

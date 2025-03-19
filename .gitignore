@@ -174,7 +174,10 @@ Thumbs.db
 
 # pnpm store
 .pnpm-store/
+**/.pnpm-store/
 server/node_modules/
 client/node_modules/
 
 server/.pnpm-store
+client/.pnpm-store
+shared/.pnpm-store

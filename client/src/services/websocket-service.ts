@@ -1,9 +1,9 @@
 import { GameConfig } from '../config';
-import { io, Socket } from 'socket.io-client';
+import { io, type Socket } from 'socket.io-client';
 
 export interface WebSocketMessage {
   type: string;
-  data?: any;
+  data?: unknown;
   clientId?: string;
   timestamp?: number;
 }
@@ -12,18 +12,18 @@ export type WebSocketStatus = 'connected' | 'connecting' | 'disconnected' | 'err
 
 export class WebSocketService {
   private socket: Socket | null = null;
-  private isConnected: boolean = false;
-  private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = GameConfig.websocket.reconnectAttempts;
-  private reconnectDelay: number = GameConfig.websocket.reconnectDelay;
-  private messageCallbacks: Map<string, ((data: any) => void)[]> = new Map();
-  private clientId: string = Math.random().toString(36).substring(7);
+  private isConnected = false;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = GameConfig.websocket.reconnectAttempts;
+  private reconnectDelay = GameConfig.websocket.reconnectDelay;
+  private messageCallbacks = new Map<string, ((data: unknown) => void)[]>();
+  private clientId = Math.random().toString(36).substring(7);
   private connectionPromise: Promise<boolean> | null = null;
-  private debug: boolean = GameConfig.websocket.debug;
+  private debug = GameConfig.websocket.debug;
   private _status: WebSocketStatus = 'disconnected';
   private pingInterval: number | null = null;
-  private lastPongTime: number = 0;
-  private connectionStartTime: number = 0;
+  private lastPongTime = 0;
+  private connectionStartTime = 0;
   
   constructor() {
     this.logDebug('WebSocketService initialized with clientId:', this.clientId);
@@ -201,15 +201,41 @@ export class WebSocketService {
   /**
    * Handle socket close event
    */
-  private handleSocketClose(reject: (reason?: any) => void, reason: string): void {
+  private handleSocketClose(reject: (reason?: unknown) => void, reason: string): void {
     this.logDebug('Socket.io connection closed:', reason);
     
     // Clean up connection state
     this.isConnected = false;
-    this.cleanupConnection();
     
-    // Update status
-    this.status = 'disconnected';
+    // Don't fully cleanup connection if we plan to reconnect
+    if (reason === 'io client disconnect' || reason === 'io server disconnect') {
+      // These are intentional disconnects, don't auto-reconnect
+      this.cleanupConnection();
+      this.status = 'disconnected';
+    } else {
+      // For unintentional disconnections, attempt reconnection
+      this.status = 'connecting';
+      this.logDebug(`Connection lost (${reason}). Attempting to reconnect...`);
+      
+      // Attempt reconnect (after a delay)
+      setTimeout(() => {
+        // Only attempt reconnect if we're not already connected and below max attempts
+        if (!this.isConnected && this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.reconnectAttempts++;
+          const delay = this.reconnectDelay * this.reconnectAttempts;
+          
+          this.logDebug(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+          
+          // Clear the promise so we can reconnect
+          this.connectionPromise = null;
+          
+          // Attempt reconnection
+          this.connect().catch(error => {
+            this.logError('Reconnection attempt failed:', error);
+          });
+        }
+      }, 1000); // Wait 1 second before reconnecting
+    }
     
     // Reject the connection promise if it exists
     if (this.connectionPromise) {
@@ -224,7 +250,7 @@ export class WebSocketService {
   /**
    * Handle socket error event
    */
-  private handleSocketError(reject: (reason?: any) => void, error: Error): void {
+  private handleSocketError(reject: (reason?: unknown) => void, error: Error): void {
     this.logError('Socket.io error:', error);
     
     // Clean up connection state
@@ -242,18 +268,6 @@ export class WebSocketService {
     
     // Dispatch an event
     this.dispatchEvent('error', { error });
-  }
-  
-  /**
-   * Handle socket message event
-   */
-  private handleSocketMessage(data: any): void {
-    try {
-      // With Socket.io, messages are already parsed to objects
-      this.handleMessage(data);
-    } catch (error) {
-      this.logError('Error handling message:', error);
-    }
   }
   
   /**
@@ -299,7 +313,38 @@ export class WebSocketService {
   /**
    * Send a message to the server
    */
-  sendMessage(type: string, data: any): Promise<void> {
+  sendMessage(type: string, data: unknown): Promise<void> {
+    // If not connected, try to connect first
+    if (!this.socket || !this.isConnected) {
+      this.logDebug(`Not connected when trying to send ${type}. Attempting to connect...`);
+      
+      // First connect, then send message
+      return this.connect()
+        .then(connected => {
+          if (!connected) {
+            this.logError(`Failed to connect when sending ${type} message`);
+            throw new Error('Failed to connect');
+          }
+          
+          // Double check connection after connect attempt
+          if (!this.socket || !this.isConnected) {
+            this.logError('Cannot send message - still not connected after connection attempt');
+            throw new Error('Not connected');
+          }
+          
+          // Now send the message
+          return this.sendMessageInternal(type, data);
+        });
+    }
+    
+    // Already connected, just send the message
+    return this.sendMessageInternal(type, data);
+  }
+  
+  /**
+   * Internal method to send a message when already connected
+   */
+  private sendMessageInternal(type: string, data: unknown): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.socket || !this.isConnected) {
         this.logError('Cannot send message - not connected');
@@ -321,30 +366,39 @@ export class WebSocketService {
   /**
    * Alias for sendMessage for backward compatibility
    */
-  send(type: string, data: any): Promise<void> {
+  send(type: string, data: unknown): Promise<void> {
     return this.sendMessage(type, data);
   }
   
   /**
    * Register a callback for a specific message type
    */
-  on(type: string, callback: (data: any) => void): void {
+  on(type: string, callback: (data: unknown) => void): void {
     if (!this.messageCallbacks.has(type)) {
       this.messageCallbacks.set(type, []);
     }
     
-    this.messageCallbacks.get(type)!.push(callback);
+    const callbacks = this.messageCallbacks.get(type);
+    if (!callbacks) {
+      this.messageCallbacks.set(type, [callback]);
+    } else {
+      callbacks.push(callback);
+    }
   }
   
   /**
    * Remove a callback for a specific message type
    */
-  off(type: string, callback: (data: any) => void): void {
+  off(type: string, callback: (data: unknown) => void): void {
     if (!this.messageCallbacks.has(type)) {
       return;
     }
     
-    const callbacks = this.messageCallbacks.get(type)!;
+    const callbacks = this.messageCallbacks.get(type);
+    if (!callbacks) {
+      return;
+    }
+    
     const index = callbacks.indexOf(callback);
     
     if (index !== -1) {
@@ -390,7 +444,7 @@ export class WebSocketService {
   /**
    * Dispatch a custom event
    */
-  private dispatchEvent(type: string, data: any): void {
+  private dispatchEvent(type: string, data: unknown): void {
     // Create an event with the same name as the WebSocket message type
     const event = new CustomEvent(`ws:${type}`, { detail: data });
     window.dispatchEvent(event);
@@ -414,7 +468,7 @@ export class WebSocketService {
   /**
    * Log a debug message
    */
-  private logDebug(...args: any[]): void {
+  private logDebug(...args: unknown[]): void {
     if (this.debug) {
       console.debug('[WebSocketService]', ...args);
     }
@@ -423,21 +477,8 @@ export class WebSocketService {
   /**
    * Log an error message
    */
-  private logError(...args: any[]): void {
+  private logError(...args: unknown[]): void {
     console.error('[WebSocketService]', ...args);
-  }
-  
-  /**
-   * Get a human-readable string for a WebSocket state
-   */
-  private getWebSocketStateString(state: number): string {
-    switch (state) {
-      case 0: return 'CONNECTING';
-      case 1: return 'OPEN';
-      case 2: return 'CLOSING';
-      case 3: return 'CLOSED';
-      default: return 'UNKNOWN';
-    }
   }
   
   /**
@@ -455,13 +496,13 @@ export class WebSocketService {
     
     // Invoke callbacks for this message type
     const callbacks = this.messageCallbacks.get(type) || [];
-    callbacks.forEach(callback => {
+    for (const callback of callbacks) {
       try {
         callback(data);
       } catch (error) {
         this.logError(`Error in message handler for type ${type}:`, error);
       }
-    });
+    }
     
     // Also dispatch a general 'message' event
     this.dispatchEvent('message', message);

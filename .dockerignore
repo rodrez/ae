@@ -1,0 +1,38 @@
+# Node modules
+node_modules
+**/node_modules
+
+# PNPM store
+.pnpm-store
+**/.pnpm-store
+
+# Build outputs
+dist
+**/dist
+
+# Environment variables
+.env
+**/.env
+**/.env.*
+!**/.env.example
+
+# Editor directories
+.vscode
+.idea
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache directories
+.cache
+.npm
+.eslintcache
+
+# System files
+.DS_Store
+Thumbs.db 
