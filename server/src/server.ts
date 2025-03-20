@@ -1,5 +1,4 @@
 import Fastify from 'fastify';
-import fastifyWebsocket from '@fastify/websocket';
 import fastifyCors from '@fastify/cors';
 import fastifyJwt from '@fastify/jwt';
 import fastifyRedis from '@fastify/redis';
@@ -9,7 +8,13 @@ import path from 'node:path';
 import { setupRoutes } from './routes';
 import { config } from './config';
 import { setupSocketHandlers } from './websocket';
-import { db, queryClient as pool } from './db';
+
+// Extend FastifyRequest to include our custom property
+declare module 'fastify' {
+  interface FastifyRequest {
+    isPublicRoute?: boolean;
+  }
+}
 
 // Create Fastify server
 const server = Fastify({
@@ -29,12 +34,7 @@ async function start() {
   try {
     // Register Fastify plugins
     await server.register(fastifyCors, {
-      origin: [
-        'http://localhost:3001',
-        'http://localhost:5173',
-        'http://127.0.0.1:3001',
-        'http://127.0.0.1:5173',
-      ],
+      origin: config.corsOrigins,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -79,42 +79,77 @@ async function start() {
       client: redisClient
     });
 
-    // Register WebSocket plugin
-    await server.register(fastifyWebsocket);
-
     // Register static files plugin
     await server.register(fastifyStatic, {
       root: path.join(process.cwd(), 'public'),
+      prefix: '/public/',
+      decorateReply: true
+    });
+
+    // Route for monitoring page - Register BEFORE the JWT hook
+    server.get('/monitor', async (request, reply) => {
+      // Send the file directly from the public directory
+      return reply.sendFile('monitor.html');
+    });
+
+    // Skip JWT verification for monitor and other public routes
+    // Using preHandler to disable JWT requirement
+    server.addHook('preHandler', (request, reply, done) => {
+      const url = request.url;
+      server.log.debug(`Processing request for URL: ${url}`);
+      
+      // Set a flag on public routes to skip JWT verification
+      if (
+        url === '/login' ||
+        url === '/register' ||
+        url.startsWith('/monitor') ||
+        url === '/health' ||
+        url === '/'
+      ) {
+        request.isPublicRoute = true;
+        server.log.debug('Marked as public route, skipping JWT verification');
+      }
+      
+      done();
     });
 
     // JWT verification hook for protected routes
     server.addHook('onRequest', async (request, reply) => {
-      // Skip JWT verification for public routes
+      // Check our custom flag instead of URL matching
+      if (request.isPublicRoute) {
+        server.log.debug('Public route detected, skipping JWT verification');
+        return;
+      }
+      
+      // Alternative check directly with URL
+      const url = request.url;
       if (
-        request.routeOptions?.url === '/login' ||
-        request.routeOptions?.url === '/register' ||
-        request.routeOptions?.url === '/monitor' ||
-        request.routeOptions?.url === '/health' ||
-        request.routeOptions?.url?.startsWith('/public/') ||
-        request.routeOptions?.url === '/'
+        url === '/login' ||
+        url === '/register' ||
+        url.startsWith('/monitor') ||
+        url === '/health' ||
+        url === '/'
       ) {
+        server.log.debug(`Public URL detected (${url}), skipping JWT verification`);
         return;
       }
 
       try {
+        server.log.debug('Attempting JWT verification');
         await request.jwtVerify();
       } catch (err) {
+        server.log.error('JWT verification failed');
         reply.send(err);
       }
     });
 
-    // Route for monitoring page
-    server.get('/monitor', async (_, reply) => {
-      return reply.sendFile('monitor.html');
-    });
-
     // Register all routes
     await setupRoutes(server);
+
+    // Start the server
+    await server.listen({ port: config.port, host: '0.0.0.0' });
+    console.log(`Alternate Earth MMO Server running on 0.0.0.0:${config.port}`);
+    console.log(`Environment: ${config.environment}`);
 
     // Create HTTP server for socket.io
     const httpServer = server.server;
@@ -129,15 +164,14 @@ async function start() {
       },
       pingTimeout: 30000,
       pingInterval: 15000,
+      // Explicitly set both transports to ensure compatibility
+      transports: ['websocket', 'polling'],
+      // Add path for clarity
+      path: '/socket.io/'
     });
 
     // Setup socket handlers
     setupSocketHandlers(io, server.redis);
-
-    // Start the server
-    await server.listen({ port: config.port, host: '0.0.0.0' });
-    console.log(`Alternate Earth MMO Server running on 0.0.0.0:${config.port}`);
-    console.log(`Environment: ${config.environment}`);
 
   } catch (err) {
     server.log.error(err);

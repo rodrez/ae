@@ -11,7 +11,8 @@ export const GameConfig = {
     reconnectAttempts: 5,  // How many times to try reconnecting
     reconnectDelay: 3000,  // Base delay between reconnect attempts (ms)
     timeout: 30000,        // Connection timeout (ms)
-    debug: true            // Enable WebSocket debug logging
+    debug: true,           // Enable WebSocket debug logging
+    path: '/socket.io/'    // Socket.IO path
   },
   
   // Game settings

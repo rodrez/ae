@@ -98,6 +98,8 @@ export class WebSocketService {
               },
               timeout: GameConfig.websocket.timeout,
               withCredentials: true, // Enable CORS credentials
+              path: '/socket.io/',
+              autoConnect: false // We'll manually connect
             });
             
             // Set up event handlers
@@ -118,6 +120,9 @@ export class WebSocketService {
               this.logError('Socket.io error:', error);
               this.dispatchEvent('error', { error });
             });
+            
+            // Explicitly connect after setting up all handlers
+            this.socket.connect();
             
           } catch (error) {
             this.logError('Failed to create Socket.io connection:', error);
@@ -167,7 +172,7 @@ export class WebSocketService {
     // For development environments, connect directly to the Socket.io server
     // instead of relying on the automatic proxy
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      return 'http://localhost:3000';
+      return GameConfig.apiUrl;
     }
     
     // For production, we can rely on same origin or a production server URL
@@ -252,6 +257,16 @@ export class WebSocketService {
    */
   private handleSocketError(reject: (reason?: unknown) => void, error: Error): void {
     this.logError('Socket.io error:', error);
+    
+    // Log more detailed error information
+    if (error && typeof error === 'object') {
+      this.logError('Error details:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+        type: error.constructor.name
+      });
+    }
     
     // Clean up connection state
     this.isConnected = false;
