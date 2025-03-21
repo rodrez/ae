@@ -108,12 +108,14 @@ export class GeolocationService {
 
   /**
    * Register a callback for location updates
+   * @param callback The function to call when location is updated
+   * @param sendLastPosition Whether to immediately send the last known position (defaults to false)
    */
-  onLocationUpdate(callback: (position: GeolocationPosition) => void): void {
+  onLocationUpdate(callback: (position: GeolocationPosition) => void, sendLastPosition: boolean = false): void {
     this.locationListeners.push(callback);
     
-    // Immediately provide the last known position if available
-    if (this.lastKnownPosition) {
+    // Only send the last position if requested and available
+    if (sendLastPosition && this.lastKnownPosition) {
       callback(this.lastKnownPosition);
     }
   }

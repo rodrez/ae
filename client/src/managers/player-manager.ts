@@ -1,8 +1,10 @@
+import Phaser from "phaser";
 import { Player } from "../entities/characters/player";
 import { OtherPlayer } from "../entities/characters/other-player";
 import { WorldService } from "../services/world-service";
 import type { PlayerState } from "../services/world-service";
 import { GameConfig } from "../config";
+import { GeoMapper } from "../utils/geo-mapping";
 
 /**
  * Interface for checking movement status on player objects
@@ -38,11 +40,129 @@ export class PlayerManager {
   public initialize(playerId: string): void {
     this.playerId = playerId;
     
-    // Create the player
-    this.createPlayer();
+    // Create the player without using the default position
+    this.createPlayer(false);
     
     // Subscribe to player updates from the server
     this.setupPlayerUpdateListener();
+  }
+
+  /**
+   * Create the player character
+   * @param useDefaultPosition Whether to use default position or let it be set later
+   */
+  private createPlayer(useDefaultPosition: boolean = true): void {
+    // Default position in the center of the world
+    const defaultX = useDefaultPosition ? GameConfig.worldWidth / 2 : 0;
+    const defaultY = useDefaultPosition ? GameConfig.worldHeight / 2 : 0;
+    
+    // Create the player sprite
+    this.player = new Player(
+      this.scene, 
+      defaultX, 
+      defaultY, 
+      'player', // texture key
+      'Player' // default name
+    );
+    
+    // Add the player to the entities layer if available, otherwise to the scene
+    const layers = this.scene.registry.get('layers');
+    if (layers && layers.entities) {
+      layers.entities.add(this.player);
+    } else {
+      this.scene.add.existing(this.player);
+    }
+    
+    // Enable physics for the player
+    this.scene.physics.add.existing(this.player);
+    
+    // Make camera follow the player
+    this.scene.cameras.main.startFollow(this.player);
+    
+    // Set player's physics properties
+    this.player.setCollideWorldBounds(true);
+  }
+
+  /**
+   * Set up listener for player updates from the server
+   */
+  private setupPlayerUpdateListener(): void {
+    // Create a single listener for player updates
+    this.playerUpdateListener = (players: Map<string, PlayerState>) => {
+      // Process updates for other players
+      this.processOtherPlayerUpdates(players);
+    };
+    
+    // Register the listener with world service
+    this.worldService.onPlayersUpdate(this.playerUpdateListener);
+  }
+
+  /**
+   * Process updates for other players from the server
+   */
+  private processOtherPlayerUpdates(players: Map<string, PlayerState>): void {
+    // Skip processing if our player isn't yet active
+    if (!this.player || !this.player.active) return;
+    
+    // Get all player IDs from the update
+    const playerIds = Array.from(players.keys());
+    
+    // Get the entities layer if available
+    const layers = this.scene.registry.get('layers');
+    const entityLayer = layers ? layers.entities : null;
+    
+    // Create or update other players
+    for (const id of playerIds) {
+      // Skip our own player
+      if (id === this.playerId) continue;
+      
+      const playerData = players.get(id);
+      if (!playerData) continue;
+      
+      // Check if this player exists in our map
+      if (!this.otherPlayers.has(id)) {
+        // Create a new other player
+        const otherPlayer = new OtherPlayer(
+          this.scene,
+          playerData.position.x,
+          playerData.position.y,
+          'player', // texture key
+          playerData.name
+        );
+        
+        // Add to entity layer if available, otherwise to scene
+        if (entityLayer) {
+          entityLayer.add(otherPlayer);
+        } else {
+          this.scene.add.existing(otherPlayer);
+        }
+        
+        // Enable physics
+        this.scene.physics.add.existing(otherPlayer);
+        
+        // Store in our map
+        this.otherPlayers.set(id, otherPlayer);
+      } else {
+        // Update existing player
+        const otherPlayer = this.otherPlayers.get(id);
+        if (!otherPlayer) continue;
+        
+        // Move the other player to the new position
+        otherPlayer.updatePosition(
+          playerData.position.x,
+          playerData.position.y
+        );
+      }
+    }
+    
+    // Remove players that are no longer in the update
+    for (const [id, otherPlayer] of this.otherPlayers) {
+      if (!players.has(id)) {
+        // Player has left, remove them
+        otherPlayer.destroy();
+        this.otherPlayers.delete(id);
+      }
+    }
   }
 
   /**
@@ -107,6 +227,20 @@ export class PlayerManager {
         this.updatePlayerPositionTimer = 0;
       }
     }
+  }
+
+  /**
+   * Update the player's position on the server
+   */
+  private updatePlayerPosition(): void {
+    if (!this.player || !this.player.active) return;
+    
+    // Get current position
+    const x = this.player.x;
+    const y = this.player.y;
+    
+    // Send to server
+    this.worldService.updatePlayerPosition(x, y);
   }
 
   /**
@@ -177,119 +311,28 @@ export class PlayerManager {
     
     this.worldService.joinWorld(
       this.playerId,
-      `Player_${this.playerId.substring(Math.max(0, this.playerId.length - 6))}`,
-      x || this.player.x,
-      y || this.player.y
-    ).then(() => {
-      // Notify all callbacks
-      for (const callback of this.joinWorldCallbacks) {
-        callback();
+      this.player.name,
+      x,
+      y,
+    ).then(success => {
+      if (success) {
+        // Mark player as active
+        this.player.setActive(true);
+        
+        // Execute callbacks
+        for (const callback of this.joinWorldCallbacks) {
+          callback();
+        }
       }
-    }).catch(error => {
-      console.error("Failed to join world:", error);
     });
   }
 
   /**
-   * Create the player character
+   * Leave the game world
    */
-  private createPlayer(): void {
-    // Create player at the center of the world initially
-    const x = GameConfig.worldWidth / 2;
-    const y = GameConfig.worldHeight / 2;
-
-    this.player = new Player(this.scene, x, y, "character");
-    this.scene.add.existing(this.player);
-    this.scene.physics.add.existing(this.player);
-
-    // Set up camera to follow player
-    this.scene.cameras.main.startFollow(this.player);
+  public leaveWorld(): void {
+    if (!this.playerId) return;
+    
+    this.worldService.leaveWorld();
   }
-
-  /**
-   * Set up listener for player updates from the server
-   */
-  private setupPlayerUpdateListener(): void {
-    this.playerUpdateListener = this.handlePlayersUpdate.bind(this);
-    this.worldService.onPlayersUpdate(this.playerUpdateListener);
-  }
-
-  /**
-   * Handle updates about other players from the server
-   */
-  private handlePlayersUpdate(players: Map<string, PlayerState>): void {
-    // Skip processing if this is our own update
-    if (!this.playerId || !this.player) return;
-
-    // Keep track of current players to remove those who are no longer present
-    const currentPlayerIds = new Set<string>();
-
-    // Process updates for all players except self
-    for (const [playerId, playerData] of players.entries()) {
-      // Skip ourselves
-      if (playerId === this.playerId) continue;
-
-      currentPlayerIds.add(playerId);
-
-      if (this.otherPlayers.has(playerId)) {
-        // Update existing player
-        const otherPlayer = this.otherPlayers.get(playerId);
-        if (otherPlayer) {
-          otherPlayer.updatePosition(
-            playerData.position.x,
-            playerData.position.y,
-          );
-        }
-      } else {
-        // Create new player
-        const otherPlayer = new OtherPlayer(
-          this.scene,
-          playerData.position.x,
-          playerData.position.y,
-          "character",
-          playerData.name,
-        );
-        this.scene.add.existing(otherPlayer);
-        this.otherPlayers.set(playerId, otherPlayer);
-        console.log(`Added player: ${playerData.name}`);
-        
-        // Notify of new player (used for map updates, etc.)
-        this.onPlayerJoined(playerId, playerData);
-      }
-    }
-
-    // Remove players that are no longer in the update
-    for (const [playerId, otherPlayer] of this.otherPlayers.entries()) {
-      if (!currentPlayerIds.has(playerId)) {
-        otherPlayer.destroy();
-        this.otherPlayers.delete(playerId);
-        console.log(`Removed player: ${playerId}`);
-      }
-    }
-  }
-
-  /**
-   * Handle when a new player joins
-   */
-  private onPlayerJoined(playerId: string, playerData: PlayerState): void {
-    // Optional hook for subclasses or external handlers
-    // This might be used by the Game scene to update the map with player markers
-  }
-
-  /**
-   * Send player position update to the server
-   */
-  private async updatePlayerPosition(): Promise<void> {
-    if (!this.player || !this.playerId) return;
-
-    try {
-      await this.worldService.updatePlayerPosition(
-        this.player.x,
-        this.player.y,
-      );
-    } catch (error) {
-      console.error("Failed to update position:", error);
-      // Error handling would be managed by the ConnectionManager
-    }
-  }
-} 
+}

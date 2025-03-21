@@ -29,19 +29,19 @@ export const GameConfig = {
   // Map settings
   map: {
     // Geographic boundaries for the game world
-    // Default is centered on San Francisco with a surrounding area
-    originLatitude: 37.810, // Top-left corner (north-west)
-    originLongitude: -122.480, // Top-left corner (north-west)
-    boundaryLatitude: 37.710, // Bottom-right corner (south-east)
-    boundaryLongitude: -122.380, // Bottom-right corner (south-east)
+    // Modified: More zoomed in boundaries centered on New York City
+    originLatitude: 40.760, // Top-left corner (north-west) - ZOOMED IN
+    originLongitude: -74.020, // Top-left corner (north-west) - ZOOMED IN
+    boundaryLatitude: 40.730, // Bottom-right corner (south-east) - ZOOMED IN
+    boundaryLongitude: -73.970, // Bottom-right corner (south-east) - ZOOMED IN
     
     // Default center position (for initialization)
-    defaultCenter: { lat: 37.7749, lng: -122.4194 }, // San Francisco
-    defaultZoom: 1,
+    defaultCenter: { lat: 40.745, lng: -73.995 }, // New York City - centered better for zoom
+    defaultZoom: 2, // Increased zoom level
     
     // Scaling settings
-    metersPerPixel: 10, // How many meters each pixel represents
-    updateDistance: 20, // Minimum movement distance in meters to trigger position update
+    metersPerPixel: 5, // Reduced from 10 to show more detail
+    updateDistance: 10, // Reduced from 20 for more frequent updates at zoomed level
     
     // Game mechanics settings
     entityRadius: 100, // Radius in meters to show other entities
@@ -49,23 +49,23 @@ export const GameConfig = {
     
     // Room/grid settings
     gridCellSize: 100, // Size of grid cells in game units
-    cellSizeMeters: 500, // Approximate size of a grid cell in meters
+    cellSizeMeters: 250, // Reduced from 500 for more granular regions at zoom level
     
     // Points of interest
     pointsOfInterest: [
       {
-        name: "Downtown",
-        latitude: 37.7749,
-        longitude: -122.4194,
+        name: "Manhattan",
+        latitude: 40.7831,
+        longitude: -73.9712,
         radius: 200,
         type: "city"
       },
       {
-        name: "Ocean Beach",
-        latitude: 37.7594,
-        longitude: -122.5107,
+        name: "Central Park",
+        latitude: 40.7812,
+        longitude: -73.9665,
         radius: 300,
-        type: "beach"
+        type: "landmark"
       }
     ],
     

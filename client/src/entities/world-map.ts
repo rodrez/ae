@@ -78,7 +78,7 @@ export class WorldMap {
         
         // Add OpenStreetMap tiles with a custom style
         this.mapLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
+            maxZoom: 16,
             minZoom: 2,
             attribution: '© OpenStreetMap contributors'
         }).addTo(this.leafletMap);

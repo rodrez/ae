@@ -47,12 +47,40 @@ export class GeoMapper {
   private latScale: number;
   private lngScale: number;
   
+  // Cached values for performance
+  private latDistance: number;
+  private lngDistance: number;
+  
   constructor(config: GeoMapConfig) {
     this.config = config;
     
+    // Calculate the geographic distance
+    this.latDistance = Math.abs(config.boundaryLatitude - config.originLatitude);
+    this.lngDistance = Math.abs(config.boundaryLongitude - config.originLongitude);
+    
     // Calculate scale factors (units per degree)
-    this.latScale = config.worldHeight / Math.abs(config.boundaryLatitude - config.originLatitude);
-    this.lngScale = config.worldWidth / Math.abs(config.boundaryLongitude - config.originLongitude);
+    this.latScale = config.worldHeight / this.latDistance;
+    this.lngScale = config.worldWidth / this.lngDistance;
+    
+    // Log the scale factors for debugging
+    console.log(`GeoMapper initialized with scale factors: 
+                 latScale=${this.latScale.toFixed(2)} px/degree,
+                 lngScale=${this.lngScale.toFixed(2)} px/degree`);
+    console.log(`Geographic area: ${this.latDistance.toFixed(6)}° latitude × ${this.lngDistance.toFixed(6)}° longitude`);
+    
+    // Calculate approximate meters per pixel for reference
+    const latMetersPerDegree = this.approximateMetersPerDegree(
+      (config.originLatitude + config.boundaryLatitude) / 2
+    );
+    const metersPerPixelLat = latMetersPerDegree / this.latScale;
+    const metersPerPixelLng = (this.calculateGeoDistance(
+      config.originLatitude, config.originLongitude,
+      config.originLatitude, config.boundaryLongitude
+    ) / config.worldWidth);
+    
+    console.log(`Approximate resolution: 
+                 ${metersPerPixelLat.toFixed(2)} meters/pixel (latitude), 
+                 ${metersPerPixelLng.toFixed(2)} meters/pixel (longitude)`);
   }
   
   /**
@@ -179,10 +207,28 @@ export class GeoMapper {
   updateConfig(config: Partial<GeoMapConfig>): void {
     this.config = { ...this.config, ...config };
     
+    // Recalculate geographic distances
+    this.latDistance = Math.abs(this.config.boundaryLatitude - this.config.originLatitude);
+    this.lngDistance = Math.abs(this.config.boundaryLongitude - this.config.originLongitude);
+    
     // Recalculate scale factors
-    this.latScale = this.config.worldHeight / 
-                   Math.abs(this.config.boundaryLatitude - this.config.originLatitude);
-    this.lngScale = this.config.worldWidth / 
-                   Math.abs(this.config.boundaryLongitude - this.config.originLongitude);
+    this.latScale = this.config.worldHeight / this.latDistance;
+    this.lngScale = this.config.worldWidth / this.lngDistance;
+    
+    console.log(`GeoMapper updated with scale factors: 
+                 latScale=${this.latScale.toFixed(2)} px/degree,
+                 lngScale=${this.lngScale.toFixed(2)} px/degree`);
+  }
+  
+  /**
+   * Approximate meters per degree of latitude at a given latitude
+   * @param latitude Latitude in degrees
+   * @returns Approximate meters per degree
+   */
+  private approximateMetersPerDegree(latitude: number): number {
+    // At the equator, 1 degree is approximately 111,320 meters
+    // This value decreases as you move towards the poles
+    const latRad = latitude * Math.PI / 180;
+    return 111320 * Math.cos(latRad);
   }
 } 

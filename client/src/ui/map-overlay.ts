@@ -23,6 +23,7 @@ export class MapOverlay {
   private map: L.Map | null = null;
   private playerMarker: L.Marker | null = null;
   private accuracyCircle: L.Circle | null = null;
+  private boundaryCircle: L.Circle | null = null;
   private poiMarkers: Map<string, L.Marker> = new Map();
   private gridLayer: L.LayerGroup | null = null;
   private isVisible = true; // Always visible now
@@ -33,6 +34,9 @@ export class MapOverlay {
   private onRefreshCallback: (() => void) | null = null;
   private boundingBox: L.LatLngBounds | null = null;
   private poiClickListener: ((poi: PointOfInterest) => void) | null = null;
+  private readonly BOUNDARY_RADIUS = 300; // Reduced from 600 to 300 meters boundary radius for more focused view
+  private readonly MAP_ZOOM_LEVEL = 19; // Increased zoom level from 18 to 19 for closer view
+  private fixedBoundaryLocation: [number, number] | null = null; // Fixed location for boundary circle
 
   constructor() {
     // Create container for the map that fills the entire game area
@@ -64,9 +68,20 @@ export class MapOverlay {
     // Initialize the map immediately
     this.poiService = new PoiService();
     
+    // Set fixed boundary in New York
+    this.setFixedBoundaryInNewYork();
+    
     // Initialize the map and POI service
     this.initializeMap();
     this.initializePoiService();
+  }
+
+  /**
+   * Sets the boundary circle to a fixed location in New York
+   */
+  setFixedBoundaryInNewYork(): void {
+    const nyc = GameConfig.map.defaultCenter;
+    this.fixedBoundaryLocation = [nyc.lat, nyc.lng]; // Set to New York coordinates
   }
 
   /**
@@ -78,15 +93,24 @@ export class MapOverlay {
     // Fix Leaflet icon path issue
     this.fixLeafletIconPath();
 
-    // Create Leaflet map instance
+    // Create Leaflet map instance with disabled zoom controls and interactions
     this.map = L.map(this.mapContainer, {
       attributionControl: false,
-      zoomControl: true,
+      // zoomControl: false, // Disable zoom controls
+      dragging: true, // Keep panning enabled
+      touchZoom: true, // Enable touch zoom for better user control
+      doubleClickZoom: true, // Enable double click zoom
+      scrollWheelZoom: true, // Enable scroll wheel zoom
+      // boxZoom: false, // Disable box zoom
+      keyboard: false, // Disable keyboard navigation
+      zoomSnap: 0.1, // For finer zoom control if we programmatically zoom
+      maxBounds: undefined, // Will be set dynamically based on player position
+      zoom: this.MAP_ZOOM_LEVEL,
     });
 
     // Add tile layer
     L.tileLayer(this.tileLayerUrl, {
-      maxZoom: 19,
+      maxZoom: 21, // Increased from 19 to 21 to allow deeper zoom levels
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(this.map);
 
@@ -103,7 +127,19 @@ export class MapOverlay {
 
     // Initialize with center point if no position yet
     const defaultCenter = GameConfig.map.defaultCenter;
-    this.map.setView([defaultCenter.lat, defaultCenter.lng], 15);
+    this.map.setView([defaultCenter.lat, defaultCenter.lng], this.MAP_ZOOM_LEVEL);
+
+    // Create initial boundary circle in New York
+    if (this.fixedBoundaryLocation) {
+      this.boundaryCircle = L.circle(this.fixedBoundaryLocation, {
+        radius: this.BOUNDARY_RADIUS,
+        color: '#ff3300',
+        fillColor: '#ff3300',
+        fillOpacity: 0.1,
+        weight: 2,
+        dashArray: '5, 10'
+      }).addTo(this.map);
+    }
 
     // Add points of interest
     this.addPointsOfInterest();
@@ -172,8 +208,45 @@ export class MapOverlay {
       }
     }
     
-    // Center map on player
-    this.map.setView([latitude, longitude], 16);
+    // Only update boundary circle if not fixed to New York
+    if (!this.fixedBoundaryLocation) {
+      // Update boundary circle position if it exists, otherwise create it
+      if (this.boundaryCircle) {
+        this.boundaryCircle.setLatLng([latitude, longitude]);
+      } else {
+        this.boundaryCircle = L.circle([latitude, longitude], {
+          radius: this.BOUNDARY_RADIUS,
+          color: '#ff3300',
+          fillColor: '#ff3300',
+          fillOpacity: 0.1,
+          weight: 2,
+          dashArray: '5, 10'
+        }).addTo(this.map);
+      }
+    } else if (!this.boundaryCircle && this.map) {
+      // If we have a fixed location but no boundary circle yet, create it
+      this.boundaryCircle = L.circle(this.fixedBoundaryLocation, {
+        radius: this.BOUNDARY_RADIUS,
+        color: '#ff3300',
+        fillColor: '#ff3300',
+        fillOpacity: 0.1,
+        weight: 2,
+        dashArray: '5, 10'
+      }).addTo(this.map);
+    }
+    
+    // Center map on player with fixed zoom level
+    this.map.setView([latitude, longitude], this.MAP_ZOOM_LEVEL, {
+      animate: true,
+      duration: 0.5
+    });
+    
+    // Allow manual zooming by user instead of forcing fixed zoom
+    // Only reset zoom if it drops below our minimum preferred level
+    const currentZoom = this.map.getZoom();
+    if (currentZoom < this.MAP_ZOOM_LEVEL - 2) {
+      this.map.setZoom(this.MAP_ZOOM_LEVEL);
+    }
   }
 
   /**
@@ -516,10 +589,10 @@ export class MapOverlay {
       bounds.extend(this.playerMarker.getLatLng());
     }
     
-    // Set a minimum zoom level to prevent excessive zooming
+    // Set a maximum zoom level to ensure proper zooming
     this.map.fitBounds(bounds, {
       padding: [30, 30],
-      maxZoom: 15
+      maxZoom: 19 // Increased from 15 to 19
     });
     
     // Store the bounding box for later reference

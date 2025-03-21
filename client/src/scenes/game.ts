@@ -6,7 +6,6 @@ import { WorldService } from "../services/world-service";
 import { RoomInfoDisplay } from '../ui/room-info-display';
 import { GeolocationService } from "../services/geolocation-service";
 import { GeoMapper, type GeoPosition } from "../utils/geo-mapping";
-import { MapOverlay } from "../ui/map-overlay";
 import { PoiService, PointOfInterest } from "../services/poi-service";
 import { GameUI } from "../ui/game-ui";
 import { ConnectionManager } from "../managers/connection-manager";
@@ -46,6 +45,15 @@ export class Game extends Phaser.Scene {
   private manualControls = false; // Allow manual controls as fallback
   private debugMarker?: Phaser.GameObjects.Graphics;
   private debugText?: Phaser.GameObjects.Text;
+
+  // Layer system for proper depth management
+  private layers: {
+    map: Phaser.GameObjects.Container;
+    ground: Phaser.GameObjects.Container;
+    entities: Phaser.GameObjects.Container;
+    overlay: Phaser.GameObjects.Container;
+    ui: Phaser.GameObjects.Container;
+  } | null = null;
 
   constructor() {
     super("Game");
@@ -97,22 +105,17 @@ export class Game extends Phaser.Scene {
     this.playerManager.initialize(this.playerId);
     this.locationManager.initialize(this.playerId);
     
-    // Connect location manager to player manager
-    this.locationManager.onPositionUpdate((position) => {
-      // Update player position when location changes
-      this.playerManager.setPlayerPosition(position.x, position.y);
-      
-      // Update map overlay with position
-      this.gameUI.updatePlayerPosition(position);
-      
-      // Update debug info if enabled
-      if (GameConfig.debug) {
-        this.updateDebugInfo();
-      }
-    });
-    
-    // Start tracking location
+    // Start tracking location, but don't automatically relocate
     this.locationManager.startLocationTracking();
+    
+    // Connect the relocate button to the location manager
+    this.gameUI.setRelocateHandler(() => {
+      // When user clicks relocate, set up the position handler and relocate
+      this.locationManager.relocateToDefaultPosition();
+      
+      // Then connect the location manager to player manager after user click
+      this.connectLocationManagerToPlayerManager();
+    });
     
     // Set up manual controls change handler
     this.locationManager.onManualControlsChanged((enabled) => {
@@ -154,8 +157,12 @@ export class Game extends Phaser.Scene {
   }
 
   private createWorld() {
-    // Create a simple background
-    this.add.image(640, 360, "world-bg");
+    // Initialize layer system
+    this.initializeLayers();
+    
+    // Create a simple background on the map layer
+    const background = this.add.image(640, 360, "world-bg");
+    this.layers?.map.add(background);
 
     // Add game world bounds
     this.physics.world.setBounds(
@@ -172,6 +179,48 @@ export class Game extends Phaser.Scene {
       GameConfig.worldWidth,
       GameConfig.worldHeight,
     );
+    
+    // Add some static decorative elements to the map layer (trees, rocks, etc.)
+    // These would normally come from your tilemap
+    // Example:
+    // const tree1 = this.add.image(200, 300, "tree");
+    // this.layers?.ground.add(tree1);
+  }
+
+  /**
+   * Initialize the layer system for proper rendering order
+   */
+  private initializeLayers(): void {
+    // Create containers for each layer
+    this.layers = {
+      // Background and terrain (lowest layer)
+      map: this.add.container(0, 0),
+      
+      // Ground decorations (trees, rocks, etc)
+      ground: this.add.container(0, 0),
+      
+      // Game entities (players, NPCs, monsters)
+      entities: this.add.container(0, 0),
+      
+      // Above-entity elements (projectiles, effects)
+      overlay: this.add.container(0, 0),
+      
+      // UI elements that move with the camera
+      ui: this.add.container(0, 0)
+    };
+    
+    // Set depths to ensure proper rendering order
+    this.layers.map.setDepth(10);
+    this.layers.ground.setDepth(20);
+    this.layers.entities.setDepth(30);
+    this.layers.overlay.setDepth(40);
+    this.layers.ui.setDepth(50);
+    
+    // Make UI layer fixed to the camera
+    this.layers.ui.setScrollFactor(0);
+    
+    // Store layers in the registry for access from other classes
+    this.registry.set('layers', this.layers);
   }
 
   // Create empty cursors in case keyboard is not available
@@ -255,6 +304,14 @@ export class Game extends Phaser.Scene {
     this.connectionManager.destroy();
     this.playerManager.destroy();
     this.locationManager.destroy();
+    
+    // Clean up layers
+    if (this.layers) {
+      Object.values(this.layers).forEach(layer => {
+        layer.destroy();
+      });
+      this.layers = null;
+    }
   }
 
   /**
@@ -329,5 +386,25 @@ export class Game extends Phaser.Scene {
     ].join("\n");
     
     this.gameUI.updateDebugInfo(debugText);
+  }
+
+  /**
+   * Connect location manager to player manager
+   * This will only happen after the user clicks the relocate button
+   */
+  private connectLocationManagerToPlayerManager(): void {
+    // Connect location manager to player manager
+    this.locationManager.onPositionUpdate((position) => {
+      // Update player position when location changes
+      this.playerManager.setPlayerPosition(position.x, position.y);
+      
+      // Update map overlay with position
+      this.gameUI.updatePlayerPosition(position);
+      
+      // Update debug info if enabled
+      if (GameConfig.debug) {
+        this.updateDebugInfo();
+      }
+    }, false); // Don't send last position immediately
   }
 }

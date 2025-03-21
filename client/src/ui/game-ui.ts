@@ -14,11 +14,13 @@ export class GameUI {
   private debugText: Phaser.GameObjects.Text;
   private controlsButton: Phaser.GameObjects.Container;
   private menuButton: Phaser.GameObjects.Container;
+  private relocateButton: Phaser.GameObjects.Container;
   private notificationContainer: Phaser.GameObjects.Container;
   private notifications: Phaser.GameObjects.Text[] = [];
   private helpOverlay: Phaser.GameObjects.Container;
   private helpVisible: boolean = false;
   private poiInteractionHandler: ((poi: PointOfInterest) => void) | null = null;
+  private relocateHandler: (() => void) | null = null;
 
   constructor(scene: Phaser.Scene, poiService: PoiService) {
     this.scene = scene;
@@ -301,6 +303,16 @@ export class GameUI {
     this.menuButton = this.createButton(1000, 680, "Menu", () => {
       this.toggleHelp();
     });
+    
+    // Create relocate button
+    this.relocateButton = this.createButton(900, 680, "Relocate", () => {
+      if (this.relocateHandler) {
+        this.relocateHandler();
+        this.showNotification("Relocating to default position...");
+      } else {
+        this.showNotification("Relocate function not available");
+      }
+    });
   }
   
   /**
@@ -346,6 +358,7 @@ export class GameUI {
       "Controls:",
       "• Map button: Toggle the map overlay",
       "• Controls button: Switch between GPS and manual movement",
+      "• Relocate button: Teleport to New York (default location)",
       "• Menu button: Show/hide this help screen",
       "",
       "Click anywhere to close this help screen"
@@ -477,6 +490,13 @@ export class GameUI {
    */
   public setPoiInteractionHandler(handler: (poi: PointOfInterest) => void): void {
     this.poiInteractionHandler = handler;
+  }
+
+  /**
+   * Set relocate button handler
+   */
+  public setRelocateHandler(handler: () => void): void {
+    this.relocateHandler = handler;
   }
 
   /**

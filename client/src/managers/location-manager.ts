@@ -102,7 +102,11 @@ export class LocationManager {
    * Start tracking the player's real-world location
    */
   public async startLocationTracking(): Promise<void> {
-    if (!this.useGeolocation) return;
+    // If we're not using geolocation, just use manual controls
+    if (!this.useGeolocation) {
+      this.setManualControls(true);
+      return;
+    }
     
     try {
       // Request location permission and start tracking
@@ -111,8 +115,8 @@ export class LocationManager {
       // Convert browser position to our format and update
       this.handleLocationUpdate(position);
       
-      // Set up event listeners for future updates
-      this.geoService.onLocationUpdate(this.handleLocationUpdate.bind(this));
+      // Set up event listeners for future updates without sending last position again
+      this.geoService.onLocationUpdate(this.handleLocationUpdate.bind(this), false);
       this.geoService.onLocationError(this.handleLocationError.bind(this));
       
       // Update location status indicator
@@ -183,12 +187,14 @@ export class LocationManager {
 
   /**
    * Register a callback for position updates
+   * @param callback The function to call when position is updated
+   * @param sendLastPosition Whether to immediately send the last known position (defaults to false)
    */
-  public onPositionUpdate(callback: (position: GeoPosition) => void): void {
+  public onPositionUpdate(callback: (position: GeoPosition) => void, sendLastPosition: boolean = false): void {
     this.onPositionUpdateCallback = callback;
     
-    // If we already have a position, send it immediately
-    if (this.lastGeoPosition && this.onPositionUpdateCallback) {
+    // If we already have a position and sendLastPosition is true, send it immediately
+    if (sendLastPosition && this.lastGeoPosition && this.onPositionUpdateCallback) {
       this.onPositionUpdateCallback(this.lastGeoPosition);
     }
   }
@@ -248,13 +254,10 @@ export class LocationManager {
         errorMessage += error.message || "Unknown error";
     }
     
-    // Display error message
+    // Show error message
     this.showLocationError(errorMessage);
     
-    // Update location status indicator
-    this.updateLocationStatusIndicator(false);
-    
-    // Enable manual controls as fallback
+    // Enable manual controls so the player can move around
     this.setManualControls(true);
   }
   
@@ -429,5 +432,28 @@ export class LocationManager {
     } catch (error) {
       console.error("Failed to update position:", error);
     }
+  }
+
+  /**
+   * Relocate the player to the default position
+   * This should be called when the player clicks a relocate button
+   */
+  public relocateToDefaultPosition(): void {
+    // Create default position (New York - Times Square)
+    const defaultPosition = {
+      coords: {
+        latitude: GameConfig.map.defaultCenter.lat,
+        longitude: GameConfig.map.defaultCenter.lng,
+        accuracy: 10,
+        altitude: null,
+        altitudeAccuracy: null,
+        heading: null,
+        speed: null
+      },
+      timestamp: Date.now()
+    };
+    
+    // Process the default position as if it came from geolocation
+    this.handleLocationUpdate(defaultPosition as unknown as GeolocationPosition);
   }
 } 

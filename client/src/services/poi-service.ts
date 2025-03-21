@@ -1,5 +1,3 @@
-import { GeoPosition } from "../utils/geo-mapping";
-
 // Define the types of POIs our system supports
 export type PoiType = 'city' | 'landmark' | 'quest' | 'shop' | 'resource' | 'danger' | 'player';
 
@@ -105,54 +103,54 @@ export class PoiService {
     const samplePois: PointOfInterest[] = [
       {
         id: 'city1',
-        name: 'Central Hub',
-        description: 'The main city in the game world',
+        name: 'Times Square',
+        description: 'The bustling heart of Manhattan',
         type: 'city',
-        latitude: 37.7749,
-        longitude: -122.4194,
+        latitude: 40.7580,
+        longitude: -73.9855,
         discovered: true,
         visited: true,
         interactable: true
       },
       {
         id: 'landmark1',
-        name: 'Ancient Monument',
-        description: 'A mysterious ancient structure',
+        name: 'Empire State Building',
+        description: 'An iconic skyscraper with observation deck',
         type: 'landmark',
-        latitude: 37.7850,
-        longitude: -122.4300,
+        latitude: 40.7484,
+        longitude: -73.9857,
         discovered: true,
         visited: false,
         interactable: true
       },
       {
         id: 'resource1',
-        name: 'Crystal Deposit',
-        description: 'A valuable resource node',
+        name: 'Energy Node',
+        description: 'A powerful energy source',
         type: 'resource',
-        latitude: 37.7700,
-        longitude: -122.4100,
+        latitude: 40.7320,
+        longitude: -73.9950,
         discovered: false,
         interactable: true
       },
       {
         id: 'shop1',
-        name: 'Merchant Outpost',
+        name: 'Chelsea Market',
         description: 'A place to trade goods',
         type: 'shop',
-        latitude: 37.7800,
-        longitude: -122.4000,
+        latitude: 40.7420,
+        longitude: -74.0050,
         discovered: true,
         visited: true,
         interactable: true
       },
       {
         id: 'danger1',
-        name: 'Monster Den',
-        description: 'A dangerous area with powerful enemies',
+        name: 'Central Park Anomaly',
+        description: 'A dangerous area with strange energy',
         type: 'danger',
-        latitude: 37.7600,
-        longitude: -122.4200,
+        latitude: 40.7812,
+        longitude: -73.9665,
         discovered: true,
         interactable: true
       }
