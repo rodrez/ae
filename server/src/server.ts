@@ -79,67 +79,76 @@ async function start() {
       client: redisClient
     });
 
-    // Register static files plugin
+    // Register static files plugin with the correct path
     await server.register(fastifyStatic, {
-      root: path.join(process.cwd(), 'public'),
+      root: path.join(__dirname, '../public'),
       prefix: '/public/',
       decorateReply: true
     });
 
-    // Route for monitoring page - Register BEFORE the JWT hook
+    // Register monitor routes BEFORE any other routes or hooks
+    // This ensures these routes are not affected by any subsequent hooks
     server.get('/monitor', async (request, reply) => {
-      // Send the file directly from the public directory
-      return reply.sendFile('monitor.html');
+      // Use absolute path to ensure we're pointing to the correct file
+      const filePath = path.join(__dirname, '../public/monitor.html');
+      server.log.debug(`Serving monitor.html from: ${filePath}`);
+      return reply.sendFile('monitor.html', path.join(__dirname, '../public'));
     });
 
-    // Skip JWT verification for monitor and other public routes
-    // Using preHandler to disable JWT requirement
-    server.addHook('preHandler', (request, reply, done) => {
-      const url = request.url;
-      server.log.debug(`Processing request for URL: ${url}`);
-      
-      // Set a flag on public routes to skip JWT verification
-      if (
-        url === '/login' ||
-        url === '/register' ||
-        url.startsWith('/monitor') ||
-        url === '/health' ||
-        url === '/'
-      ) {
-        request.isPublicRoute = true;
-        server.log.debug('Marked as public route, skipping JWT verification');
-      }
-      
-      done();
+    server.get('/monitor.js', async (request, reply) => {
+      // Use absolute path to ensure we're pointing to the correct file
+      const filePath = path.join(__dirname, '../public/monitor.js');
+      server.log.debug(`Serving monitor.js from: ${filePath}`);
+      return reply.sendFile('monitor.js', path.join(__dirname, '../public'));
     });
 
-    // JWT verification hook for protected routes
+    // Create a list of public routes that don't require authentication
+    const publicRoutes = [
+      '/login',
+      '/register',
+      '/favicon.ico',
+      '/health',
+      '/',
+      '/public/*',
+      '/socket.io/*'
+    ];
+
+    // JWT verification hook with public route exclusions
     server.addHook('onRequest', async (request, reply) => {
-      // Check our custom flag instead of URL matching
-      if (request.isPublicRoute) {
-        server.log.debug('Public route detected, skipping JWT verification');
+      const url = request.url;
+      
+      // Skip authentication for monitor-related routes
+      // Explicitly check for monitor routes first
+      if (url === '/monitor' || url === '/monitor.js' || url.startsWith('/socket.io/')) {
+        server.log.debug(`Monitor/WebSocket route detected (${url}), skipping JWT verification`);
         return;
       }
       
-      // Alternative check directly with URL
-      const url = request.url;
-      if (
-        url === '/login' ||
-        url === '/register' ||
-        url.startsWith('/monitor') ||
-        url === '/health' ||
-        url === '/'
-      ) {
-        server.log.debug(`Public URL detected (${url}), skipping JWT verification`);
+      // Skip authentication for OPTIONS requests (CORS preflight)
+      if (request.method === 'OPTIONS') {
+        server.log.debug('CORS preflight request detected, skipping JWT verification');
         return;
       }
-
+      
+      // Check if this is a public route
+      const isPublic = publicRoutes.some(route => {
+        if (route.endsWith('*')) {
+          return url.startsWith(route.slice(0, -1));
+        }
+        return url === route;
+      });
+      
+      if (isPublic) {
+        server.log.debug(`Public route detected (${url}), skipping JWT verification`);
+        return;
+      }
+      
       try {
         server.log.debug('Attempting JWT verification');
         await request.jwtVerify();
       } catch (err) {
         server.log.error('JWT verification failed');
-        reply.send(err);
+        reply.code(401).send({ error: 'Authentication required' });
       }
     });
 

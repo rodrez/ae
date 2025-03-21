@@ -11,7 +11,7 @@ const config: Phaser.Types.Core.GameConfig = {
   parent: "game",
   width: 1280,
   height: 720,
-  backgroundColor: "#4488aa",
+  transparent: true,
   pixelArt: true,
   scale: {
     mode: Phaser.Scale.FIT,

@@ -8,6 +8,10 @@ type Position = {
 	y: number;
 	z?: number;
 	rotation?: number;
+	// Geographic coordinates (optional)
+	latitude?: number;
+	longitude?: number;
+	accuracy?: number;
 };
 
 type GridCell = string; // Format: "x:y"
@@ -107,6 +111,18 @@ const CONFIG = {
 	},
 	BROADCAST_RADIUS: 1, // How many grid cells in each direction to broadcast to
 	STATS_INTERVAL: 5000, // How often to broadcast server stats (5 seconds)
+	
+	// Geographic settings
+	GEO: {
+		// Map boundaries (same as client)
+		ORIGIN_LAT: 37.810, // Top-left corner
+		ORIGIN_LNG: -122.480, // Top-left corner
+		BOUNDARY_LAT: 37.710, // Bottom-right corner
+		BOUNDARY_LNG: -122.380, // Bottom-right corner
+		// World size
+		WORLD_WIDTH: 1600,
+		WORLD_HEIGHT: 1200,
+	}
 };
 
 // Keep track of connected clients
@@ -146,11 +162,67 @@ const worldState: WorldState = {
 };
 
 /**
+ * Convert geographic coordinates to game world coordinates
+ */
+function geoToGameCoordinates(latitude: number, longitude: number): { x: number, y: number } {
+	// Calculate scale factors
+	const latScale = CONFIG.GEO.WORLD_HEIGHT / 
+		Math.abs(CONFIG.GEO.BOUNDARY_LAT - CONFIG.GEO.ORIGIN_LAT);
+	const lngScale = CONFIG.GEO.WORLD_WIDTH / 
+		Math.abs(CONFIG.GEO.BOUNDARY_LNG - CONFIG.GEO.ORIGIN_LNG);
+	
+	// Calculate x position (longitude)
+	const x = (longitude - CONFIG.GEO.ORIGIN_LNG) * lngScale;
+	
+	// Calculate y position (latitude) - inverted because latitude decreases as y increases
+	const y = (CONFIG.GEO.ORIGIN_LAT - latitude) * latScale;
+	
+	return { x, y };
+}
+
+/**
+ * Convert game world coordinates to geographic coordinates
+ */
+function gameToGeoCoordinates(x: number, y: number): { latitude: number, longitude: number } {
+	// Calculate scale factors
+	const latScale = CONFIG.GEO.WORLD_HEIGHT / 
+		Math.abs(CONFIG.GEO.BOUNDARY_LAT - CONFIG.GEO.ORIGIN_LAT);
+	const lngScale = CONFIG.GEO.WORLD_WIDTH / 
+		Math.abs(CONFIG.GEO.BOUNDARY_LNG - CONFIG.GEO.ORIGIN_LNG);
+	
+	// Calculate longitude from x
+	const longitude = CONFIG.GEO.ORIGIN_LNG + (x / lngScale);
+	
+	// Calculate latitude from y (inverted)
+	const latitude = CONFIG.GEO.ORIGIN_LAT - (y / latScale);
+	
+	return { latitude, longitude };
+}
+
+/**
+ * Get grid cell from geographic coordinates
+ */
+function getGridCellFromGeo(latitude: number, longitude: number): GridCell {
+	const { x, y } = geoToGameCoordinates(latitude, longitude);
+	return getGridCell({ x, y });
+}
+
+/**
  * Calculate grid cell from position
  */
 function getGridCell(position: Position): GridCell {
-	const cellX = Math.floor(position.x / CONFIG.GRID_SIZE);
-	const cellY = Math.floor(position.y / CONFIG.GRID_SIZE);
+	// If the position includes latitude/longitude, convert to game coordinates first
+	let x = position.x;
+	let y = position.y;
+	
+	if (position.latitude !== undefined && position.longitude !== undefined) {
+		const gameCoords = geoToGameCoordinates(position.latitude, position.longitude);
+		x = gameCoords.x;
+		y = gameCoords.y;
+	}
+	
+	const cellX = Math.floor(x / CONFIG.GRID_SIZE);
+	const cellY = Math.floor(y / CONFIG.GRID_SIZE);
 	return `${cellX}:${cellY}`;
 }
 
@@ -289,10 +361,54 @@ function trackMessageReceived(): void {
 }
 
 /**
+ * Format room names for better readability
+ */
+function formatRoomNames(roomNames: string[]): Array<{type: string; name: string; displayName: string}> {
+	return roomNames.map(room => {
+		if (room.startsWith(GRID_PREFIX)) {
+			return { 
+				type: 'grid',
+				name: room,
+				displayName: `Grid Cell: ${room.replace(GRID_PREFIX, '')}` 
+			};
+		} else if (room.startsWith('character:')) {
+			return { 
+				type: 'character',
+				name: room,
+				displayName: `Character: ${room.replace('character:', '')}` 
+			};
+		} else {
+			// Format standard channel names
+			switch (room) {
+				case GAME_EVENTS:
+					return { type: 'global', name: room, displayName: 'Game Events' };
+				case PLAYER_UPDATES:
+					return { type: 'global', name: room, displayName: 'Player Updates' };
+				case WORLD_UPDATES:
+					return { type: 'global', name: room, displayName: 'World Updates' };
+				case SERVER_STATS:
+					return { type: 'global', name: room, displayName: 'Server Stats' };
+				case WORLD_STATE:
+					return { type: 'global', name: room, displayName: 'World State' };
+				default:
+					return { type: 'other', name: room, displayName: room };
+			}
+		}
+	});
+}
+
+/**
  * Update client's position in the spatial grid
  */
 function updateClientGrid(client: GameClient, position: Position, logger: Logger): void {
 	if (!position) return;
+	
+	// If position has geographic coordinates, ensure game coordinates are set
+	if (position.latitude !== undefined && position.longitude !== undefined) {
+		const gameCoords = geoToGameCoordinates(position.latitude, position.longitude);
+		position.x = gameCoords.x;
+		position.y = gameCoords.y;
+	}
 	
 	const newCell = getGridCell(position);
 	
@@ -338,6 +454,23 @@ function updateClientGrid(client: GameClient, position: Position, logger: Logger
 	const neighbors = getNeighboringCells(newCell);
 	for (const cell of neighbors) {
 		socket.join(`${GRID_PREFIX}${cell}`);
+	}
+	
+	// Notify client of their updated room memberships
+	if (client.isAuthenticated) {
+		// Get the updated rooms after changes
+		const roomNames = Array.from(socket.rooms).filter(room => room !== socket.id);
+		
+		// Format room names for better readability
+		const formattedRooms = formatRoomNames(roomNames);
+		
+		// Send room info to client
+		socket.emit('room_info', {
+			timestamp: Date.now(),
+			currentCell: client.currentCell,
+			rooms: formattedRooms
+		});
+		trackMessageSent();
 	}
 }
 
@@ -602,13 +735,26 @@ export function setupSocketHandlers(
 			// Update client's position in our spatial grid
 			updateClientGrid(client, data.position, logger);
 			
+			// Prepare position data to publish
+			const positionData: any = {
+				x: data.position.x,
+				y: data.position.y
+			};
+			
+			// Include geographic coordinates if provided
+			if (data.position.latitude !== undefined && data.position.longitude !== undefined) {
+				positionData.latitude = data.position.latitude;
+				positionData.longitude = data.position.longitude;
+				positionData.accuracy = data.position.accuracy;
+			}
+			
 			// Publish to Redis for other servers to broadcast
 			await redisPub.publish(
 				PLAYER_UPDATES,
 				JSON.stringify({
 					type: 'move',
 					characterId: client.characterId,
-					position: data.position,
+					position: positionData,
 					velocity: data.velocity,
 					animation: data.animation,
 					gridCell: client.currentCell,
@@ -916,6 +1062,27 @@ export function setupSocketHandlers(
 					activeCells: Object.fromEntries(serverStats.activeCells),
 					activeCellList: Array.from(serverStats.activeCells.keys()) // Send the list format for easier display
 				}
+			});
+			trackMessageSent();
+		});
+		
+		// Handle request for room information
+		socket.on('get_rooms', () => {
+			trackMessageReceived();
+			client.lastActivity = Date.now();
+			logger.debug(`Room info requested by client ${clientId}`);
+			
+			// Get all rooms the socket is in
+			const roomNames = Array.from(socket.rooms).filter(room => room !== socket.id);
+			
+			// Format special room names for better readability
+			const formattedRooms = formatRoomNames(roomNames);
+			
+			// Send room info back to client
+			socket.emit('room_info', {
+				timestamp: Date.now(),
+				currentCell: client.currentCell,
+				rooms: formattedRooms
 			});
 			trackMessageSent();
 		});

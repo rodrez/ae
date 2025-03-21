@@ -1,5 +1,6 @@
 import { WebSocketService } from './websocket-service';
 import type { WebSocketStatus } from './websocket-service';
+import type { RoomInfo } from '../ui/room-info-display';
 
 export interface PlayerState {
   id: string;
@@ -12,7 +13,7 @@ export interface PlayerState {
 }
 
 export interface WorldUpdate {
-  players: Record<string, PlayerState>;
+  players: PlayerState[];
   timestamp: number;
 }
 
@@ -25,6 +26,7 @@ export class WorldService {
   private playerId = '';
   private playerUpdateListeners: ((players: Map<string, PlayerState>) => void)[] = [];
   private connectionStatusListeners: ((status: WebSocketStatus) => void)[] = [];
+  private roomInfoListeners: ((roomInfo: RoomInfo) => void)[] = [];
   
   constructor() {
     this.wsService = new WebSocketService();
@@ -46,8 +48,13 @@ export class WorldService {
         this.wsService.on('world_update', (data: unknown) => this.handleWorldUpdate(data as WorldUpdate));
         this.wsService.on('player_join', (data: unknown) => this.handlePlayerJoin(data as PlayerState));
         this.wsService.on('player_leave', (data: unknown) => this.handlePlayerLeave(data as { id: string }));
+        this.wsService.on('room_info', (data: unknown) => this.handleRoomInfo(data as RoomInfo));
         
         console.log('WorldService initialized successfully');
+        
+        // Request initial room information
+        this.requestRoomInfo();
+        
         return true;
       }
       
@@ -88,6 +95,37 @@ export class WorldService {
     for (const listener of this.connectionStatusListeners) {
       listener(status);
     }
+  }
+  
+  /**
+   * Request current room information from the server
+   */
+  requestRoomInfo(): void {
+    if (this.wsService.status !== 'connected') {
+      console.error('Cannot request room info: Not connected to server');
+      return;
+    }
+    
+    this.wsService.sendMessage('get_rooms', {});
+  }
+  
+  /**
+   * Handle room information updates from the server
+   */
+  private handleRoomInfo(roomInfo: RoomInfo): void {
+    console.log('Received room info:', roomInfo);
+    
+    // Notify listeners
+    for (const listener of this.roomInfoListeners) {
+      listener(roomInfo);
+    }
+  }
+  
+  /**
+   * Register a callback to be notified when room information changes
+   */
+  onRoomInfoUpdate(callback: (roomInfo: RoomInfo) => void): void {
+    this.roomInfoListeners.push(callback);
   }
   
   /**

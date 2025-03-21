@@ -1,382 +1,333 @@
-import Phaser from 'phaser';
-import { GameConfig } from '../config';
-import { Player } from '../entities/characters/player';
-import { OtherPlayer } from '../entities/characters/other-player';
-import { WorldService } from '../services/world-service';
-import type { PlayerState } from '../services/world-service';
-import type { WebSocketStatus } from '../services/websocket-service';
+import Phaser from "phaser";
+import { GameConfig } from "../config";
+import { Player } from "../entities/characters/player";
+import { OtherPlayer } from "../entities/characters/other-player";
+import { WorldService } from "../services/world-service";
+import { RoomInfoDisplay } from '../ui/room-info-display';
+import { GeolocationService } from "../services/geolocation-service";
+import { GeoMapper, type GeoPosition } from "../utils/geo-mapping";
+import { MapOverlay } from "../ui/map-overlay";
+import { PoiService, PointOfInterest } from "../services/poi-service";
+import { GameUI } from "../ui/game-ui";
+import { ConnectionManager } from "../managers/connection-manager";
+import { PlayerManager } from "../managers/player-manager";
+import { LocationManager } from "../managers/location-manager";
 
-// Instead of extending Player, create an interface for checking movement status
-interface PlayerWithMovement {
-    moving?: boolean;
-    isMoving?(): boolean;
-}
 
 export class Game extends Phaser.Scene {
-    private player!: Player;
-    private otherPlayers: Map<string, OtherPlayer> = new Map();
-    private worldService: WorldService;
-    private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-    private playerId = '';
-    private updatePlayerPositionTimer = 0;
-    private exitButton!: Phaser.GameObjects.Text;
-    private connectionErrorText?: Phaser.GameObjects.Text;
-    private connectionStatusIndicator?: Phaser.GameObjects.Container;
-    private connectionStatus = 'disconnected';
-    private _reconnectionInProgress = false;
+  // Core services
+  private worldService: WorldService;
+  private poiService: PoiService;
+  
+  // Managers
+  private connectionManager: ConnectionManager;
+  private playerManager: PlayerManager;
+  private locationManager: LocationManager;
+  private gameUI: GameUI;
+  
+  // Game state
+  private playerId: string = "";
+  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+  private player!: Player;
+  private otherPlayers: Map<string, OtherPlayer> = new Map();
+  private geoService: GeolocationService;
+  private geoMapper: GeoMapper;
+  private updatePlayerPositionTimer = 0;
+  private exitButton!: Phaser.GameObjects.Text;
+  private connectionErrorText?: Phaser.GameObjects.Text;
+  private locationErrorText?: Phaser.GameObjects.Text;
+  private connectionStatusIndicator?: Phaser.GameObjects.Container;
+  private locationStatusIndicator?: Phaser.GameObjects.Container;
+  private connectionStatus = "disconnected";
+  private _reconnectionInProgress = false;
+  private roomInfoDisplay: RoomInfoDisplay;
+  private lastGeoPosition: GeoPosition | null = null;
+  private useGeolocation = true; // Flag to enable/disable geolocation
+  private manualControls = false; // Allow manual controls as fallback
+  private debugMarker?: Phaser.GameObjects.Graphics;
+  private debugText?: Phaser.GameObjects.Text;
 
-    constructor() {
-        super('Game');
-        this.worldService = new WorldService();
-    }
+  constructor() {
+    super("Game");
+    
+    // Initialize core services
+    this.worldService = new WorldService();
+    this.poiService = new PoiService();
+    
+    // Initialize managers that depend on services
+    this.connectionManager = new ConnectionManager(this, this.worldService);
+    this.playerManager = new PlayerManager(this, this.worldService);
+    this.locationManager = new LocationManager(this, this.worldService);
+    
+    // Create UI instance but don't initialize it yet
+    this.gameUI = new GameUI(this, this.poiService);
+    
+    // Initialize GeoMapper with default config - this will be updated later
+    this.geoMapper = new GeoMapper({
+      originLatitude: GameConfig.map.originLatitude,
+      originLongitude: GameConfig.map.originLongitude,
+      boundaryLatitude: GameConfig.map.boundaryLatitude,
+      boundaryLongitude: GameConfig.map.boundaryLongitude,
+      worldWidth: GameConfig.worldWidth,
+      worldHeight: GameConfig.worldHeight
+    });
+    
+    this.geoService = new GeolocationService();
+    this.roomInfoDisplay = new RoomInfoDisplay();
+  }
 
-    async create() {
-        // Create world background
-        this.createWorld();
-
-        // Set up UI
-        this.createUI();
-
-        // Create connection status indicator
-        this.createConnectionStatusIndicator();
-
-        // Set up controls
-        this.cursors = this.input.keyboard?.createCursorKeys() ?? this.createEmptyCursors();
-
-        try {
-            // Initialize world service and connect to WebSocket
-            await this.worldService.initialize();
-            
-            // Set up WebSocket status listener
-            this.setupConnectionStatusListener();
-            
-            // Get the player ID from localStorage (set in MainMenu)
-            const storedId = localStorage.getItem('userId') ?? `guest_${Math.floor(Math.random() * 10000)}`;
-            this.playerId = storedId;
-            
-            // Create the player
-            this.createPlayer();
-            
-            // Join the world with initial position
-            await this.worldService.joinWorld(
-                this.playerId,
-                `Player_${this.playerId.substring(6)}`,
-                this.player.x,
-                this.player.y
-            );
-            
-            // Subscribe to player updates
-            this.worldService.onPlayersUpdate(this.handlePlayersUpdate.bind(this));
-            
-            // Start position update cycle
-            this.updatePlayerPositionTimer = 0;
-            
-        } catch (error) {
-            console.error('Failed to initialize game:', error);
-            alert('Failed to start game. Returning to menu.');
-            this.scene.start('MainMenu');
-        }
-    }
-
-    update(time: number, delta: number) {
-        if (!this.player) return;
-
-        // Keep track of previous movement state
-        const playerAsMovement = this.player as unknown as PlayerWithMovement;
-        const wasMoving = playerAsMovement.moving || playerAsMovement.isMoving?.();
-
-        // Update player (handles movement and animations)
-        this.player.update(this.cursors);
+  async create(): Promise<void> {
+    // Initialize services
+    await this.initializeServices();
+    
+    // Initialize UI
+    this.gameUI.initialize();
+    this.gameUI.updateStatus("Connecting to world...");
+    
+    // Initialize managers
+    this.connectionManager = new ConnectionManager(this, this.worldService);
+    this.playerManager = new PlayerManager(this, this.worldService);
+    this.locationManager = new LocationManager(this, this.worldService);
+    
+    // Generate a unique player ID
+    this.playerId = this.generatePlayerId();
+    
+    // Initialize managers with player ID
+    this.connectionManager.initialize();
+    this.playerManager.initialize(this.playerId);
+    this.locationManager.initialize(this.playerId);
+    
+    // Connect location manager to player manager
+    this.locationManager.onPositionUpdate((position) => {
+      // Update player position when location changes
+      this.playerManager.setPlayerPosition(position.x, position.y);
+      
+      // Update map overlay with position
+      this.gameUI.updatePlayerPosition(position);
+      
+      // Update debug info if enabled
+      if (GameConfig.debug) {
+        this.updateDebugInfo();
+      }
+    });
+    
+    // Start tracking location
+    this.locationManager.startLocationTracking();
+    
+    // Set up manual controls change handler
+    this.locationManager.onManualControlsChanged((enabled) => {
+      this.playerManager.setManualControls(enabled);
+      
+      const message = enabled 
+        ? "Manual controls enabled. Use arrow keys to move." 
+        : "GPS tracking active. Move in the real world to play.";
         
-        // Get current movement state
-        const isMoving = playerAsMovement.moving || playerAsMovement.isMoving?.();
+      this.gameUI.showNotification(message);
+    });
+    
+    // Connect player manager to game UI
+    this.playerManager.onJoinWorld(() => {
+      this.gameUI.updateStatus("Connected to world");
+      this.gameUI.showNotification("You've joined the world!");
+    });
+    
+    // Handle connection changes
+    this.connectionManager.onConnectionStatusChange((status) => {
+      if (status === "connected") {
+        this.handleConnected();
+      } else if (status === "disconnected") {
+        this.handleDisconnected();
+      }
+    });
+    
+    // Set up POI interaction handlers
+    this.setupInteractionHandlers();
+    
+    // Start the game
+    this.playerManager.joinWorld();
+  }
 
-        // Only send position updates when the player is moving or just stopped moving
-        if (isMoving || (wasMoving && !isMoving)) {
-            this.updatePlayerPositionTimer += delta;
-            if (this.updatePlayerPositionTimer >= 100) { // Send position every 100ms while moving
-                this.updatePlayerPosition();
-                this.updatePlayerPositionTimer = 0;
-            }
-        }
+  update(time: number, delta: number): void {
+    // Update managers
+    this.playerManager.update(delta);
+    this.locationManager.update(delta);
+  }
+
+  private createWorld() {
+    // Create a simple background
+    this.add.image(640, 360, "world-bg");
+
+    // Add game world bounds
+    this.physics.world.setBounds(
+      0,
+      0,
+      GameConfig.worldWidth,
+      GameConfig.worldHeight,
+    );
+
+    // Set up camera to follow player
+    this.cameras.main.setBounds(
+      0,
+      0,
+      GameConfig.worldWidth,
+      GameConfig.worldHeight,
+    );
+  }
+
+  // Create empty cursors in case keyboard is not available
+  private createEmptyCursors(): Phaser.Types.Input.Keyboard.CursorKeys {
+    return {
+      up: { isDown: false } as Phaser.Input.Keyboard.Key,
+      down: { isDown: false } as Phaser.Input.Keyboard.Key,
+      left: { isDown: false } as Phaser.Input.Keyboard.Key,
+      right: { isDown: false } as Phaser.Input.Keyboard.Key,
+      space: { isDown: false } as Phaser.Input.Keyboard.Key,
+      shift: { isDown: false } as Phaser.Input.Keyboard.Key,
+    };
+  }
+  
+  private setupInteractionHandlers() {
+    // Set up POI interaction handler
+    this.gameUI.setPoiInteractionHandler((poi: PointOfInterest) => {
+      this.handlePoiInteraction(poi);
+    });
+  }
+  
+  private handlePoiInteraction(poi: PointOfInterest) {
+    console.log(`Interacting with POI: ${poi.name}`);
+    
+    // Mark as visited in the POI service
+    if (poi.interactable) {
+      this.poiService.visitPoi(poi.id);
+      
+      // Handle different POI types
+      switch (poi.type) {
+        case 'shop':
+          // Open shop interface
+          this.showShopInterface(poi);
+          break;
+        case 'quest':
+          // Open quest dialog
+          this.showQuestDialog(poi);
+          break;
+        default:
+          // Generic interaction
+          this.showPoiInfo(poi);
+          break;
+      }
+    } else {
+      // Just discover it if not interactable
+      this.poiService.discoverPoi(poi.id);
+      this.showPoiInfo(poi);
     }
+  }
+  
+  private showPoiInfo(poi: PointOfInterest) {
+    // For now, just show information using the UI
+    this.gameUI.showInfoModal(
+      poi.name,
+      poi.description,
+      poi.visited ? 'You have visited this location before.' : 'This is your first time here!'
+    );
+  }
+  
+  private showShopInterface(poi: PointOfInterest) {
+    // Placeholder for shop interface
+    this.gameUI.showInfoModal(
+      `${poi.name} - Shop`,
+      poi.description,
+      'Shop interface would open here in the full implementation.'
+    );
+  }
+  
+  private showQuestDialog(poi: PointOfInterest) {
+    // Placeholder for quest dialog
+    this.gameUI.showInfoModal(
+      `${poi.name} - Quest`,
+      poi.description,
+      'Quest dialog would open here in the full implementation.'
+    );
+  }
 
-    // Create empty cursors in case keyboard is not available
-    private createEmptyCursors(): Phaser.Types.Input.Keyboard.CursorKeys {
-        return {
-            up: { isDown: false } as Phaser.Input.Keyboard.Key,
-            down: { isDown: false } as Phaser.Input.Keyboard.Key,
-            left: { isDown: false } as Phaser.Input.Keyboard.Key,
-            right: { isDown: false } as Phaser.Input.Keyboard.Key,
-            space: { isDown: false } as Phaser.Input.Keyboard.Key,
-            shift: { isDown: false } as Phaser.Input.Keyboard.Key
-        };
+  shutdown(): void {
+    // Clean up resources
+    this.gameUI.destroy();
+    this.connectionManager.destroy();
+    this.playerManager.destroy();
+    this.locationManager.destroy();
+  }
+
+  /**
+   * Initialize services required by the game
+   */
+  private async initializeServices(): Promise<void> {
+    try {
+      // Initialize WorldService first (establishes connection)
+      await this.worldService.initialize();
+      
+      // Then initialize POI service (loads POI data)
+      await this.poiService.initialize();
+      
+    } catch (error) {
+      console.error("Failed to initialize services:", error);
+      this.gameUI?.showNotification("Failed to initialize game services. Please try again.");
     }
+  }
 
-    private createWorld() {
-        // Create a simple background
-        this.add.image(640, 360, 'world-bg');
-
-        // Add game world bounds
-        this.physics.world.setBounds(0, 0, GameConfig.worldWidth, GameConfig.worldHeight);
-        
-        // Set up camera to follow player
-        this.cameras.main.setBounds(0, 0, GameConfig.worldWidth, GameConfig.worldHeight);
-    }
-
-    private createUI() {
-        // Add exit button
-        this.exitButton = this.add.text(1260, 20, 'Exit', {
-            backgroundColor: '#000000',
-            padding: { left: 10, right: 10, top: 5, bottom: 5 },
-            color: '#ffffff',
-            fontSize: '18px'
-        })
-            .setOrigin(1, 0)
-            .setScrollFactor(0)
-            .setInteractive()
-            .on('pointerdown', () => this.exitGame());
-    }
-
-    private createPlayer() {
-        // Create player character at a random position
-        const x = Math.floor(Math.random() * (GameConfig.worldWidth - 200)) + 100;
-        const y = Math.floor(Math.random() * (GameConfig.worldHeight - 200)) + 100;
-        
-        this.player = new Player(this, x, y, 'character');
-        this.add.existing(this.player);
-        this.physics.add.existing(this.player);
-        
-        // Set up camera to follow player
-        this.cameras.main.startFollow(this.player);
-    }
-
-    private async updatePlayerPosition() {
-        if (!this.player || !this.playerId) return;
-        
-        try {
-            await this.worldService.updatePlayerPosition(
-                this.player.x,
-                this.player.y
-            );
-            
-            // Reset any connection error UI indicators that might have been displayed
-            if (this.connectionErrorText?.visible) {
-                this.connectionErrorText.setVisible(false);
-            }
-        } catch (error) {
-            console.error('Failed to update position:', error);
-            
-            // Don't spam the connection attempts if we're having issues
-            // Just skip this update cycle
-            this.handleConnectionError('Position update failed. Reconnecting...');
-        }
-    }
-
-    private handlePlayersUpdate(players: Map<string, PlayerState>): void {
-        // Skip processing if this is our own update
-        if (!this.playerId || !this.player) return;
-        
-        // Keep track of current players to remove those who are no longer present
-        const currentPlayerIds = new Set<string>();
-        
-        // Process updates for all players except self
-        for (const [playerId, playerData] of players.entries()) {
-            // Skip ourselves
-            if (playerId === this.playerId) continue;
-            
-            currentPlayerIds.add(playerId);
-            
-            if (this.otherPlayers.has(playerId)) {
-                // Update existing player
-                const otherPlayer = this.otherPlayers.get(playerId);
-                if (otherPlayer) {
-                    otherPlayer.updatePosition(playerData.position.x, playerData.position.y);
-                }
-            } else {
-                // Create new player
-                const otherPlayer = new OtherPlayer(
-                    this,
-                    playerData.position.x,
-                    playerData.position.y,
-                    'character',
-                    playerData.name
-                );
-                this.add.existing(otherPlayer);
-                this.otherPlayers.set(playerId, otherPlayer);
-                console.log(`Added player: ${playerData.name}`);
-            }
-        }
-        
-        // Remove players that are no longer in the update
-        for (const [playerId, otherPlayer] of this.otherPlayers.entries()) {
-            if (!currentPlayerIds.has(playerId)) {
-                otherPlayer.destroy();
-                this.otherPlayers.delete(playerId);
-                console.log(`Removed player: ${playerId}`);
-            }
-        }
-    }
-
-    private async exitGame() {
-        try {
-            await this.worldService.leaveWorld();
-            
-            this.scene.start('MainMenu');
-        } catch (error) {
-            console.error('Failed to exit game:', error);
-            // Force return to menu even if exit fails
-            this.scene.start('MainMenu');
-        }
+  /**
+   * Generate a unique player ID
+   */
+  private generatePlayerId(): string {
+    // Generate a unique ID or use a stored one
+    const storedId = localStorage.getItem("playerId");
+    
+    if (storedId) {
+      return storedId;
     }
     
-    shutdown() {
-        // Clean up resources and event listeners
-        this.worldService.offPlayersUpdate(this.handlePlayersUpdate.bind(this));
-        this.worldService.leaveWorld().catch(console.error);
-    }
-
-    // Helper method to handle connection errors
-    private handleConnectionError(message: string): void {
-        // Create error message if it doesn't exist
-        if (!this.connectionErrorText) {
-            this.connectionErrorText = this.add.text(640, 50, '', {
-                fontFamily: 'Arial',
-                fontSize: '18px',
-                color: '#ff0000',
-                backgroundColor: '#00000088',
-                padding: { left: 10, right: 10, top: 5, bottom: 5 }
-            })
-                .setOrigin(0.5, 0)
-                .setScrollFactor(0)
-                .setDepth(1000)
-                .setVisible(false);
-        }
-        
-        // Update and show the error message
-        this.connectionErrorText.setText(message);
-        this.connectionErrorText.setVisible(true);
-        
-        // Hide after 3 seconds
-        this.time.delayedCall(3000, () => {
-            if (this.connectionErrorText) {
-                this.connectionErrorText.setVisible(false);
-            }
-        });
-        
-        // Attempt to reconnect if the status is currently disconnected or error
-        if (this.connectionStatus === 'disconnected' || this.connectionStatus === 'error') {
-            this.attemptReconnection();
-        }
-    }
-
-    // Add method to attempt reconnection
-    private attemptReconnection(): void {
-        console.log('Attempting to reconnect...');
-        
-        // Don't spam reconnection attempts - use a debounce
-        if (this._reconnectionInProgress) return;
-        
-        this._reconnectionInProgress = true;
-        
-        // Try to reconnect
-        this.worldService.reconnect()
-            .then((success: boolean) => {
-                this._reconnectionInProgress = false;
-                
-                if (success) {
-                    console.log('Reconnection successful');
-                    
-                    // If we were previously in the world, attempt to rejoin
-                    if (this.playerId && this.player) {
-                        // Rejoin the world
-                        this.worldService.joinWorld(
-                            this.playerId,
-                            `Player_${this.playerId.substring(6)}`,
-                            this.player.x,
-                            this.player.y
-                        ).catch((error: Error) => {
-                            console.error('Failed to rejoin world after reconnection:', error);
-                        });
-                    }
-                } else {
-                    console.log('Reconnection failed');
-                }
-            })
-            .catch((error: Error) => {
-                this._reconnectionInProgress = false;
-                console.error('Error during reconnection:', error);
-            });
-    }
-
-    // Add connection status listener
-    private setupConnectionStatusListener(): void {
-        this.worldService.onConnectionStatusChange((status: WebSocketStatus) => {
-            this.connectionStatus = status;
-            this.updateConnectionStatusIndicator();
-        });
-    }
-
-    // Create connection status indicator in the top-right corner
-    private createConnectionStatusIndicator(): void {
-        // Create a container to hold the indicator components
-        this.connectionStatusIndicator = this.add.container(1240, 20);
-        
-        // Add background
-        const bg = this.add.rectangle(0, 0, 20, 20, 0x000000, 0.6)
-            .setOrigin(0.5);
-        
-        // Add status circle (initial color is red for disconnected)
-        const circle = this.add.circle(0, 0, 6, 0xff0000)
-            .setOrigin(0.5);
-            
-        // Add text label
-        const label = this.add.text(15, 0, 'Connection', {
-            fontSize: '12px',
-            color: '#ffffff'
-        })
-            .setOrigin(0, 0.5);
-            
-        // Add all elements to the container
-        this.connectionStatusIndicator.add([bg, circle, label]);
-        
-        // Make it fixed to camera
-        this.connectionStatusIndicator.setScrollFactor(0);
-        
-        // Set depth to always appear on top
-        this.connectionStatusIndicator.setDepth(1000);
-        
-        // Initial update of the indicator
-        this.updateConnectionStatusIndicator();
-    }
+    // Generate a random ID if none exists
+    const newId = `player_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    localStorage.setItem("playerId", newId);
     
-    // Update the connection status indicator based on current status
-    private updateConnectionStatusIndicator(): void {
-        if (!this.connectionStatusIndicator) return;
-        
-        const circle = this.connectionStatusIndicator.getAt(1) as Phaser.GameObjects.Arc;
-        const label = this.connectionStatusIndicator.getAt(2) as Phaser.GameObjects.Text;
-        
-        if (!circle || !label) return;
-        
-        // Set color based on status
-        switch (this.connectionStatus) {
-            case 'connected':
-                circle.fillColor = 0x00ff00; // Green
-                label.setText('Connected');
-                break;
-            case 'connecting':
-                circle.fillColor = 0xffff00; // Yellow
-                label.setText('Connecting...');
-                break;
-            case 'error':
-                circle.fillColor = 0xff0000; // Red
-                label.setText('Error');
-                break;
-            default:
-                circle.fillColor = 0xff0000; // Red
-                label.setText('Disconnected');
-                break;
-        }
-    }
+    return newId;
+  }
+
+  /**
+   * Handle successful connection to server
+   */
+  private handleConnected(): void {
+    this.gameUI.updateStatus("Connected to world");
+  }
+
+  /**
+   * Handle disconnection from server
+   */
+  private handleDisconnected(): void {
+    this.gameUI.updateStatus("Disconnected - Attempting to reconnect...");
+    this.gameUI.showNotification("Lost connection to server. Trying to reconnect...");
+  }
+
+  /**
+   * Update debug information
+   */
+  private updateDebugInfo(): void {
+    if (!GameConfig.debug) return;
+    
+    const position = this.locationManager.getLastPosition();
+    const isUsingGeo = this.locationManager.isUsingGeolocation();
+    const connectionStatus = this.connectionManager.getConnectionStatus();
+    
+    if (!position) return;
+    
+    const debugText = [
+      `Position: (${Math.round(position.x)}, ${Math.round(position.y)})`,
+      `Geo: ${position.latitude.toFixed(6)}, ${position.longitude.toFixed(6)}`,
+      `Accuracy: ${position.accuracy?.toFixed(1) || "unknown"} meters`,
+      `Location: ${isUsingGeo ? "GPS" : "Manual"}`,
+      `Connection: ${connectionStatus}`,
+      `Players: ${this.playerManager.getPlayerCount()}`
+    ].join("\n");
+    
+    this.gameUI.updateDebugInfo(debugText);
+  }
 }

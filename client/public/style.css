@@ -30,20 +30,36 @@ canvas {
     background: transparent !important;
 }
 
-/* Leaflet customization */
-#leaflet-map-container {
+/* Map background styling */
+.map-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     z-index: 0;
 }
 
 /* Ensure Phaser's canvas is above Leaflet but allows interaction with both */
 canvas {
-    position: relative;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: 100% !important;
     z-index: 1;
     pointer-events: none; /* Allows clicking through to Leaflet map */
 }
 
 /* Make specific Phaser UI elements clickable */
-.clickable {
+.phaser-ui {
+    pointer-events: auto !important;
+}
+
+/* The markers on the map should be clickable */
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-popup {
     pointer-events: auto !important;
 }
 
@@ -84,7 +100,7 @@ canvas {
 
 /* Make Leaflet controls more visible */
 .leaflet-control-zoom {
-    display: none; /* We'll use our own zoom controls */
+    display: block; /* Show zoom controls for the map */
 }
 
 .leaflet-popup-content-wrapper,
@@ -95,4 +111,39 @@ canvas {
 /* Make sure the tooltips are visible through the canvas */
 .leaflet-tooltip {
     z-index: 10;
+}
+
+/* POI styling */
+.poi-popup {
+    color: #000;
+    padding: 5px;
+    max-width: 200px;
+}
+
+.poi-popup h3 {
+    margin: 0 0 5px 0;
+    color: #2c3e50;
+    font-size: 14px;
+}
+
+.poi-popup p {
+    margin: 3px 0;
+    font-size: 12px;
+}
+
+.poi-popup .visited {
+    color: #27ae60;
+    font-style: italic;
+}
+
+.poi-popup .interactable {
+    color: #e67e22;
+    font-weight: bold;
+}
+
+/* Phaser UI containers should be clickable */
+#game canvas,
+#game div,
+#game button {
+    pointer-events: auto;
 }

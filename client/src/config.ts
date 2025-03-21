@@ -4,7 +4,7 @@ export const GameConfig = {
   apiUrl: 'http://localhost:3000',
   
   // Debug mode
-  debug: false,
+  debug: true,
   
   // WebSocket settings
   websocket: {
@@ -28,14 +28,52 @@ export const GameConfig = {
   
   // Map settings
   map: {
-    defaultCenter: { lat: 37.7749, lng: -122.4194 }, // Default center (San Francisco)
+    // Geographic boundaries for the game world
+    // Default is centered on San Francisco with a surrounding area
+    originLatitude: 37.810, // Top-left corner (north-west)
+    originLongitude: -122.480, // Top-left corner (north-west)
+    boundaryLatitude: 37.710, // Bottom-right corner (south-east)
+    boundaryLongitude: -122.380, // Bottom-right corner (south-east)
+    
+    // Default center position (for initialization)
+    defaultCenter: { lat: 37.7749, lng: -122.4194 }, // San Francisco
     defaultZoom: 1,
+    
+    // Scaling settings
     metersPerPixel: 10, // How many meters each pixel represents
-    updateDistance: 200, // Distance in meters before triggering a map update
-    entityRadius: 1000, // Radius in meters to check for entities
-    flags: {
-      captureRadius: 500, // Radius in meters to capture a flag
-      territoryRadius: 600 // Radius in meters for territory control
+    updateDistance: 20, // Minimum movement distance in meters to trigger position update
+    
+    // Game mechanics settings
+    entityRadius: 100, // Radius in meters to show other entities
+    interactionRadius: 50, // Radius in meters for interactions
+    
+    // Room/grid settings
+    gridCellSize: 100, // Size of grid cells in game units
+    cellSizeMeters: 500, // Approximate size of a grid cell in meters
+    
+    // Points of interest
+    pointsOfInterest: [
+      {
+        name: "Downtown",
+        latitude: 37.7749,
+        longitude: -122.4194,
+        radius: 200,
+        type: "city"
+      },
+      {
+        name: "Ocean Beach",
+        latitude: 37.7594,
+        longitude: -122.5107,
+        radius: 300,
+        type: "beach"
+      }
+    ],
+    
+    // Feature flags
+    features: {
+      showDebugGrid: true, // Show grid cells
+      showAccuracyRadius: true, // Show GPS accuracy radius
+      showPointsOfInterest: true // Show POIs on map
     }
   }
 }; 

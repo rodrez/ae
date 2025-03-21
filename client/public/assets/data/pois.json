@@ -1,0 +1,115 @@
+[
+  {
+    "id": "city1",
+    "name": "Central Hub",
+    "description": "The main city in the game world where players can trade, rest, and get quests.",
+    "type": "city",
+    "latitude": 37.7749,
+    "longitude": -122.4194,
+    "discovered": true,
+    "visited": true,
+    "interactable": true
+  },
+  {
+    "id": "landmark1",
+    "name": "Ancient Monument",
+    "description": "A mysterious stone structure with strange glyphs carved into its surface.",
+    "type": "landmark",
+    "latitude": 37.7850,
+    "longitude": -122.4300,
+    "discovered": true,
+    "visited": false,
+    "interactable": true
+  },
+  {
+    "id": "landmark2",
+    "name": "Observation Tower",
+    "description": "A tall tower offering a panoramic view of the surrounding landscape.",
+    "type": "landmark",
+    "latitude": 37.7720,
+    "longitude": -122.4050,
+    "discovered": false,
+    "interactable": true
+  },
+  {
+    "id": "resource1",
+    "name": "Crystal Deposit",
+    "description": "A valuable resource node containing energy crystals.",
+    "type": "resource",
+    "latitude": 37.7700,
+    "longitude": -122.4100,
+    "discovered": false,
+    "interactable": true
+  },
+  {
+    "id": "resource2",
+    "name": "Mineral Vein",
+    "description": "Rich deposits of rare metals and minerals.",
+    "type": "resource",
+    "latitude": 37.7670,
+    "longitude": -122.4080,
+    "discovered": false,
+    "interactable": true
+  },
+  {
+    "id": "shop1",
+    "name": "Merchant Outpost",
+    "description": "A small trading post where travelers can exchange goods.",
+    "type": "shop",
+    "latitude": 37.7800,
+    "longitude": -122.4000,
+    "discovered": true,
+    "visited": true,
+    "interactable": true
+  },
+  {
+    "id": "shop2",
+    "name": "Artisan Workshop",
+    "description": "A craftsman's workshop specializing in unique items.",
+    "type": "shop",
+    "latitude": 37.7830,
+    "longitude": -122.4050,
+    "discovered": false,
+    "interactable": true
+  },
+  {
+    "id": "danger1",
+    "name": "Monster Den",
+    "description": "A cave inhabited by dangerous creatures. Approach with caution!",
+    "type": "danger",
+    "latitude": 37.7600,
+    "longitude": -122.4200,
+    "discovered": true,
+    "interactable": true
+  },
+  {
+    "id": "danger2",
+    "name": "Corrupted Zone",
+    "description": "An area tainted by strange energies. Not safe for unprepared explorers.",
+    "type": "danger",
+    "latitude": 37.7550,
+    "longitude": -122.4250,
+    "discovered": false,
+    "interactable": true
+  },
+  {
+    "id": "quest1",
+    "name": "Distress Signal",
+    "description": "Someone is calling for help from this location.",
+    "type": "quest",
+    "latitude": 37.7720,
+    "longitude": -122.4190,
+    "discovered": true,
+    "interactable": true
+  },
+  {
+    "id": "quest2",
+    "name": "Lost Expedition",
+    "description": "The last known location of a missing research team.",
+    "type": "quest",
+    "latitude": 37.7650,
+    "longitude": -122.4280,
+    "discovered": false,
+    "interactable": true
+  }
+] 
