@@ -2,6 +2,8 @@
  * Shared type definitions between client and server
  */
 
+export * from './logger';
+
 export interface PlayerPosition {
   x: number;
   y: number;

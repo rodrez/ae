@@ -1,7 +1,7 @@
-import Phaser from "phaser";
-import { MapOverlay } from "./map-overlay";
-import { PoiService, PointOfInterest } from "../services/poi-service";
-import { GeoPosition } from "../utils/geo-mapping";
+import type Phaser from "phaser";
+import { MapOverlay, type PhaserLayers } from "./map-overlay";
+import type { PoiService, PointOfInterest } from "../services/poi-service";
+import type { GeoPosition } from "../utils/geo-mapping";
 
 /**
  * Manages all UI elements for the game scene
@@ -18,14 +18,14 @@ export class GameUI {
   private notificationContainer: Phaser.GameObjects.Container;
   private notifications: Phaser.GameObjects.Text[] = [];
   private helpOverlay: Phaser.GameObjects.Container;
-  private helpVisible: boolean = false;
+  private helpVisible = false;
   private poiInteractionHandler: ((poi: PointOfInterest) => void) | null = null;
   private relocateHandler: (() => void) | null = null;
 
   constructor(scene: Phaser.Scene, poiService: PoiService) {
     this.scene = scene;
     this.poiService = poiService;
-    
+
     // Initialize components only when explicitly called
     // Don't create UI elements in constructor
   }
@@ -39,10 +39,21 @@ export class GameUI {
     this.createButtons();
     this.createNotificationArea();
     this.createHelpOverlay();
+
+    // Get the layer system from the scene registry
+    const layers = this.scene.registry.get("layers") as PhaserLayers;
+
+    // Initialize map overlay with proper z-index
+    this.mapOverlay = new MapOverlay(this.poiService);
     
-    // Initialize map overlay as a background
-    this.mapOverlay = new MapOverlay();
-    
+    // Remove the DOM manipulation code since it's now handled by the MapOverlay class
+    // Let the MapOverlay class handle its own positioning
+
+    // Make map overlay aware of the Phaser layer system
+    if (layers) {
+      this.mapOverlay.setPhaserLayers(layers);
+    }
+
     // Initialize POI Service for the map overlay if not already initialized
     if (this.poiService) {
       this.initializeMapPois();
@@ -86,7 +97,7 @@ export class GameUI {
   /**
    * Show a notification to the player
    */
-  public showNotification(message: string, duration: number = 3000): void {
+  public showNotification(message: string, duration = 3000): void {
     // Create notification text
     const notification = this.scene.add.text(0, 0, message, {
       fontFamily: "Arial",
@@ -95,16 +106,16 @@ export class GameUI {
       backgroundColor: "#00000088",
       padding: { left: 10, right: 10, top: 5, bottom: 5 },
     });
-    
+
     notification.setOrigin(0.5);
-    
+
     // Add to container and array
     this.notificationContainer.add(notification);
     this.notifications.push(notification);
-    
+
     // Position notifications (stack from bottom to top)
     this.repositionNotifications();
-    
+
     // Auto-remove after duration
     this.scene.time.delayedCall(duration, () => {
       this.removeNotification(notification);
@@ -118,6 +129,24 @@ export class GameUI {
     if (this.statusText) {
       this.statusText.setText(text);
     }
+  }
+
+  /**
+   * Update connection status indicator
+   */
+  public updateConnectionStatus(connected: boolean): void {
+    const status = connected ? "Connected" : "Disconnected";
+    this.updateStatus(status);
+
+    // Could also update a visual indicator here if needed
+  }
+
+  /**
+   * Show a warning notification with a longer duration
+   */
+  public showWarning(message: string, duration = 5000): void {
+    this.showNotification(message, duration);
+    // Could add additional styling or sound effects for warnings
   }
 
   /**
@@ -147,12 +176,12 @@ export class GameUI {
     const modal = this.scene.add.container(640, 360);
     modal.setDepth(300);
     modal.setScrollFactor(0);
-    
+
     // Semi-transparent background
     const bg = this.scene.add.rectangle(0, 0, 600, 400, 0x000000, 0.8);
     bg.setOrigin(0.5);
     bg.setStrokeStyle(2, 0xffffff);
-    
+
     // Title
     const titleText = this.scene.add.text(0, -150, title, {
       fontFamily: "Arial",
@@ -161,30 +190,30 @@ export class GameUI {
       align: "center",
     });
     titleText.setOrigin(0.5);
-    
+
     // Main text
     const mainText = this.scene.add.text(0, -50, text, {
       fontFamily: "Arial",
       fontSize: "18px",
       color: "#ffffff",
       align: "center",
-      wordWrap: { width: 500 }
+      wordWrap: { width: 500 },
     });
     mainText.setOrigin(0.5);
-    
+
     // Details text (if provided)
-    let detailsText;
+    let detailsText: Phaser.GameObjects.Text | undefined;
     if (details) {
       detailsText = this.scene.add.text(0, 50, details, {
         fontFamily: "Arial",
         fontSize: "16px",
         color: "#cccccc",
         align: "center",
-        wordWrap: { width: 500 }
+        wordWrap: { width: 500 },
       });
       detailsText.setOrigin(0.5);
     }
-    
+
     // Close button
     const closeButton = this.scene.add.text(0, 150, "CLOSE", {
       fontFamily: "Arial",
@@ -195,25 +224,25 @@ export class GameUI {
     });
     closeButton.setOrigin(0.5);
     closeButton.setInteractive({ useHandCursor: true });
-    
+
     // Add all elements to the container
     const elements = [bg, titleText, mainText, closeButton];
     if (detailsText) {
       elements.push(detailsText);
     }
     modal.add(elements);
-    
+
     // Close button handler
     closeButton.on("pointerdown", () => {
       modal.destroy();
     });
-    
+
     // Click anywhere to close
     bg.setInteractive();
     bg.on("pointerdown", () => {
       modal.destroy();
     });
-    
+
     // Show notification
     this.showNotification(`Discovered: ${title}`);
   }
@@ -226,36 +255,36 @@ export class GameUI {
     if (this.mapOverlay) {
       this.mapOverlay.destroy();
     }
-    
+
     // Clean up UI elements
     if (this.statusText) {
       this.statusText.destroy();
     }
-    
+
     if (this.debugText) {
       this.debugText.destroy();
     }
-    
+
     if (this.controlsButton) {
       this.controlsButton.destroy();
     }
-    
+
     if (this.menuButton) {
       this.menuButton.destroy();
     }
-    
+
     if (this.notificationContainer) {
       this.notificationContainer.destroy();
     }
-    
+
     if (this.helpOverlay) {
       this.helpOverlay.destroy();
     }
-    
+
     // Clear arrays
     this.notifications = [];
   }
-  
+
   /**
    * Create status text display
    */
@@ -272,7 +301,7 @@ export class GameUI {
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
       .setDepth(100);
-      
+
     // Debug text at bottom of screen (hidden by default)
     this.debugText = this.scene.add
       .text(10, 710, "", {
@@ -287,7 +316,7 @@ export class GameUI {
       .setDepth(100)
       .setVisible(false);
   }
-  
+
   /**
    * Create UI buttons
    */
@@ -298,12 +327,12 @@ export class GameUI {
       // This will need to be connected to the location manager
       this.showNotification("Controls button pressed");
     });
-    
+
     // Create menu button
     this.menuButton = this.createButton(1000, 680, "Menu", () => {
       this.toggleHelp();
     });
-    
+
     // Create relocate button
     this.relocateButton = this.createButton(900, 680, "Relocate", () => {
       if (this.relocateHandler) {
@@ -314,7 +343,7 @@ export class GameUI {
       }
     });
   }
-  
+
   /**
    * Create notification area
    */
@@ -323,7 +352,7 @@ export class GameUI {
     this.notificationContainer.setDepth(100);
     this.notificationContainer.setScrollFactor(0);
   }
-  
+
   /**
    * Create help overlay with game instructions
    */
@@ -331,11 +360,11 @@ export class GameUI {
     this.helpOverlay = this.scene.add.container(640, 360);
     this.helpOverlay.setDepth(200);
     this.helpOverlay.setScrollFactor(0);
-    
+
     // Semi-transparent background
     const bg = this.scene.add.rectangle(0, 0, 800, 600, 0x000000, 0.8);
     bg.setOrigin(0.5);
-    
+
     // Help title
     const title = this.scene.add.text(0, -250, "GAME HELP", {
       fontFamily: "Arial",
@@ -344,32 +373,37 @@ export class GameUI {
       align: "center",
     });
     title.setOrigin(0.5);
-    
+
     // Help text
-    const helpText = this.scene.add.text(0, -50, [
-      "Welcome to Alternate Earth!",
-      "",
-      "How to play:",
-      "• Move around in the real world to explore the game world",
-      "• Discover points of interest by visiting new locations",
-      "• Interact with other players and complete quests",
-      "• Use the map overlay to see your location and points of interest",
-      "",
-      "Controls:",
-      "• Map button: Toggle the map overlay",
-      "• Controls button: Switch between GPS and manual movement",
-      "• Relocate button: Teleport to New York (default location)",
-      "• Menu button: Show/hide this help screen",
-      "",
-      "Click anywhere to close this help screen"
-    ].join("\n"), {
-      fontFamily: "Arial",
-      fontSize: "18px",
-      color: "#ffffff",
-      align: "left",
-    });
+    const helpText = this.scene.add.text(
+      0,
+      -50,
+      [
+        "Welcome to Alternate Earth!",
+        "",
+        "How to play:",
+        "• Move around in the real world to explore the game world",
+        "• Discover points of interest by visiting new locations",
+        "• Interact with other players and complete quests",
+        "• Use the map overlay to see your location and points of interest",
+        "",
+        "Controls:",
+        "• Map button: Toggle the map overlay",
+        "• Controls button: Switch between GPS and manual movement",
+        "• Relocate button: Teleport to New York (default location)",
+        "• Menu button: Show/hide this help screen",
+        "",
+        "Click anywhere to close this help screen",
+      ].join("\n"),
+      {
+        fontFamily: "Arial",
+        fontSize: "18px",
+        color: "#ffffff",
+        align: "left",
+      },
+    );
     helpText.setOrigin(0.5, 0.5);
-    
+
     // Close button
     const closeButton = this.scene.add.text(0, 220, "CLOSE", {
       fontFamily: "Arial",
@@ -383,16 +417,16 @@ export class GameUI {
     closeButton.on("pointerdown", () => {
       this.hideHelp();
     });
-    
+
     // Add all elements to container
     this.helpOverlay.add([bg, title, helpText, closeButton]);
-    
+
     // Click anywhere to close
     bg.setInteractive();
     bg.on("pointerdown", () => {
       this.hideHelp();
     });
-    
+
     // Hide initially
     this.helpOverlay.setVisible(false);
   }
@@ -401,20 +435,20 @@ export class GameUI {
    * Create a button with text and background
    */
   private createButton(
-    x: number, 
-    y: number, 
-    text: string, 
-    callback: () => void
+    x: number,
+    y: number,
+    text: string,
+    callback: () => void,
   ): Phaser.GameObjects.Container {
     const container = this.scene.add.container(x, y);
     container.setDepth(100);
     container.setScrollFactor(0);
-    
+
     // Button background
     const bg = this.scene.add.rectangle(0, 0, 90, 40, 0x666666, 0.8);
     bg.setOrigin(0.5);
     bg.setStrokeStyle(2, 0xffffff);
-    
+
     // Button text
     const buttonText = this.scene.add.text(0, 0, text, {
       fontFamily: "Arial",
@@ -422,26 +456,26 @@ export class GameUI {
       color: "#ffffff",
     });
     buttonText.setOrigin(0.5);
-    
+
     // Add elements to container
     container.add([bg, buttonText]);
-    
+
     // Make interactive
     bg.setInteractive({ useHandCursor: true });
     bg.on("pointerdown", callback);
-    
+
     // Hover effects
     bg.on("pointerover", () => {
       bg.fillColor = 0x888888;
     });
-    
+
     bg.on("pointerout", () => {
       bg.fillColor = 0x666666;
     });
-    
+
     return container;
   }
-  
+
   /**
    * Remove a notification from display
    */
@@ -451,15 +485,15 @@ export class GameUI {
     if (index >= 0) {
       this.notifications.splice(index, 1);
     }
-    
+
     // Remove from container
     this.notificationContainer.remove(notification);
     notification.destroy();
-    
+
     // Reposition remaining notifications
     this.repositionNotifications();
   }
-  
+
   /**
    * Reposition all notifications in the stack
    */
@@ -472,7 +506,7 @@ export class GameUI {
       }
     }
   }
-  
+
   /**
    * Set up event handlers for UI components
    */
@@ -488,7 +522,9 @@ export class GameUI {
   /**
    * Set handler for POI interactions
    */
-  public setPoiInteractionHandler(handler: (poi: PointOfInterest) => void): void {
+  public setPoiInteractionHandler(
+    handler: (poi: PointOfInterest) => void,
+  ): void {
     this.poiInteractionHandler = handler;
   }
 
@@ -503,32 +539,71 @@ export class GameUI {
    * Initialize POIs for the map overlay
    */
   private initializeMapPois(): void {
-    // This method will initialize the POIs for the map overlay
+    // This method will be the central point for POI management
     if (!this.mapOverlay || !this.poiService) return;
-    
+
     // Register POI click listener if we have a handler
     if (this.poiInteractionHandler) {
       this.mapOverlay.setPoiClickListener(this.poiInteractionHandler);
     }
-    
-    // Load POIs when they're available
+
+    // Initial load of all POIs
+    this.loadAllPois();
+
+    // Listen for POI updates to keep map in sync
+    this.poiService.onPoiUpdated((poi) => {
+      this.handlePoiUpdate(poi);
+    });
+
+    // Listen for new POIs being loaded
     this.poiService.onPoisLoaded(() => {
-      const allPois = this.poiService.getAllPois();
-      
-      // Add POIs to the map
-      allPois.forEach(poi => {
-        // Add all POIs to the map, but only discovered ones should be visible
-        if (poi.discovered || poi.type === 'city') {
-          this.mapOverlay.addCustomPoint(
-            poi.name,
-            poi.latitude,
-            poi.longitude,
-            poi.type
-          );
-        }
-      });
-      
-      this.showNotification("Map updated with points of interest");
+      this.loadAllPois();
     });
   }
-} 
+
+  /**
+   * Load all POIs onto the map
+   */
+  private loadAllPois(): void {
+    const allPois = this.poiService.getAllPois();
+    
+    // Add POIs to the map
+    let addedCount = 0;
+    for (const poi of allPois) {
+      // Add all POIs to the map, but only discovered ones should be visible
+      if (poi.discovered || poi.type === "city") {
+        this.mapOverlay.addCustomPoint(
+          poi.name,
+          poi.latitude,
+          poi.longitude,
+          poi.type,
+        );
+        addedCount++;
+      }
+    }
+
+    if (addedCount > 0) {
+      this.showNotification(`Map updated with ${addedCount} points of interest`);
+    }
+  }
+
+  /**
+   * Handle updates to a single POI
+   */
+  private handlePoiUpdate(poi: PointOfInterest): void {
+    if (poi.discovered || poi.type === "city") {
+      // Update existing POI or add new one
+      this.mapOverlay.addCustomPoint(
+        poi.name,
+        poi.latitude,
+        poi.longitude,
+        poi.type,
+      );
+      
+      // Only show discovery notification if it's a new discovery
+      if (poi.discovered && !poi.visited) {
+        this.showNotification(`Discovered new location: ${poi.name}`);
+      }
+    }
+  }
+}

@@ -4,10 +4,11 @@
  */
 
 import { GameConfig } from "../config";
-import { GeoPosition } from "../utils/geo-mapping";
+import type { GeoPosition } from "../utils/geo-mapping";
 import "leaflet/dist/leaflet.css";
-import * as L from 'leaflet';
-import { PoiService, PointOfInterest, PoiType } from '../services/poi-service';
+import * as L from "leaflet";
+import { PoiService, type PointOfInterest } from "../services/poi-service";
+import type Phaser from "phaser";
 
 export interface MapPoint {
   name: string;
@@ -17,12 +18,22 @@ export interface MapPoint {
   type: string;
 }
 
+/**
+ * Interface for Phaser layer system
+ */
+export interface PhaserLayers {
+  map: Phaser.GameObjects.Container;
+  ground: Phaser.GameObjects.Container;
+  entities: Phaser.GameObjects.Container;
+  overlay: Phaser.GameObjects.Container;
+  ui: Phaser.GameObjects.Container;
+}
+
 export class MapOverlay {
   private container: HTMLDivElement;
   private mapContainer: HTMLDivElement;
   private map: L.Map | null = null;
   private playerMarker: L.Marker | null = null;
-  private accuracyCircle: L.Circle | null = null;
   private boundaryCircle: L.Circle | null = null;
   private poiMarkers: Map<string, L.Marker> = new Map();
   private gridLayer: L.LayerGroup | null = null;
@@ -34,11 +45,12 @@ export class MapOverlay {
   private onRefreshCallback: (() => void) | null = null;
   private boundingBox: L.LatLngBounds | null = null;
   private poiClickListener: ((poi: PointOfInterest) => void) | null = null;
-  private readonly BOUNDARY_RADIUS = 300; // Reduced from 600 to 300 meters boundary radius for more focused view
-  private readonly MAP_ZOOM_LEVEL = 19; // Increased zoom level from 18 to 19 for closer view
+  private readonly BOUNDARY_RADIUS = 600; // Reduced from 600 to 300 meters boundary radius for more focused view
+  private readonly MAP_ZOOM_LEVEL = 16; // Set to 16 for an appropriate zoom level
   private fixedBoundaryLocation: [number, number] | null = null; // Fixed location for boundary circle
+  private phaserLayers: PhaserLayers | null = null; // Reference to Phaser layer system
 
-  constructor() {
+  constructor(poiService?: PoiService) {
     // Create container for the map that fills the entire game area
     this.container = document.createElement("div");
     this.container.className = "map-background";
@@ -47,8 +59,11 @@ export class MapOverlay {
     this.container.style.top = "0";
     this.container.style.width = "100%";
     this.container.style.height = "100%";
-    this.container.style.zIndex = "0"; // Bottom layer
-    this.container.style.overflow = "hidden";
+    this.container.style.zIndex = "0"; // Set to 0 instead of -1
+    this.container.style.pointerEvents = "auto"; // Changed from 'none' to 'auto' to allow map interaction
+
+    // Add a CSS class to differentiate this as the map container
+    this.container.dataset.mapContainer = "true";
 
     // Create map container within the main container
     this.mapContainer = document.createElement("div");
@@ -62,15 +77,21 @@ export class MapOverlay {
     // Add points of interest from config
     this.pointsOfInterest = GameConfig.map.pointsOfInterest || [];
 
-    // Add element to DOM
-    document.body.appendChild(this.container);
+    // Find the game canvas and insert the map container before it
+    const canvas = document.querySelector("canvas");
+    if (canvas?.parentNode) {
+      canvas.parentNode.insertBefore(this.container, canvas);
+    } else {
+      // If canvas doesn't exist yet, add to body and will be repositioned later
+      document.body.appendChild(this.container);
+    }
 
-    // Initialize the map immediately
-    this.poiService = new PoiService();
-    
+    // Use provided POI service or create a new one
+    this.poiService = poiService || new PoiService();
+
     // Set fixed boundary in New York
     this.setFixedBoundaryInNewYork();
-    
+
     // Initialize the map and POI service
     this.initializeMap();
     this.initializePoiService();
@@ -99,19 +120,19 @@ export class MapOverlay {
       // zoomControl: false, // Disable zoom controls
       dragging: true, // Keep panning enabled
       touchZoom: true, // Enable touch zoom for better user control
-      doubleClickZoom: true, // Enable double click zoom
+      // doubleClickZoom: true, // Enable double click zoom
       scrollWheelZoom: true, // Enable scroll wheel zoom
       // boxZoom: false, // Disable box zoom
       keyboard: false, // Disable keyboard navigation
-      zoomSnap: 0.1, // For finer zoom control if we programmatically zoom
+      // zoomSnap: 0.1, // For finer zoom control if we programmatically zoom
       maxBounds: undefined, // Will be set dynamically based on player position
-      zoom: this.MAP_ZOOM_LEVEL,
+      zoom: 16, // Set to 16 as requested
     });
 
     // Add tile layer
     L.tileLayer(this.tileLayerUrl, {
-      maxZoom: 21, // Increased from 19 to 21 to allow deeper zoom levels
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(this.map);
 
     // Create layer for grid
@@ -127,17 +148,17 @@ export class MapOverlay {
 
     // Initialize with center point if no position yet
     const defaultCenter = GameConfig.map.defaultCenter;
-    this.map.setView([defaultCenter.lat, defaultCenter.lng], this.MAP_ZOOM_LEVEL);
+    this.map.setView([defaultCenter.lat, defaultCenter.lng], 16); // Set zoom to 16
 
     // Create initial boundary circle in New York
     if (this.fixedBoundaryLocation) {
       this.boundaryCircle = L.circle(this.fixedBoundaryLocation, {
         radius: this.BOUNDARY_RADIUS,
-        color: '#ff3300',
-        fillColor: '#ff3300',
+        color: "#ff3300",
+        fillColor: "#ff3300",
         fillOpacity: 0.1,
         weight: 2,
-        dashArray: '5, 10'
+        dashArray: "5, 10",
       }).addTo(this.map);
     }
 
@@ -155,12 +176,15 @@ export class MapOverlay {
    */
   private fixLeafletIconPath(): void {
     // This fixes an issue with Leaflet marker icons in bundled environments
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (L.Icon.Default.prototype as any)._getIconUrl;
-    
+
     L.Icon.Default.mergeOptions({
-      iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
-      iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
-      shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+      iconRetinaUrl:
+        "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
+      iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
+      shadowUrl:
+        "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
     });
   }
 
@@ -169,11 +193,40 @@ export class MapOverlay {
    */
   updatePosition(position: GeoPosition): void {
     this.lastPosition = position;
-    
+
     // No need to check visibility since it's always visible
     if (!this.map) return;
-    
-    // Update map view
+
+    const { latitude, longitude } = position;
+
+    // Create or update player marker
+    if (!this.playerMarker) {
+      // Create a custom player marker that's more visible
+      const playerIcon = L.divIcon({
+        className: 'player-marker',
+        html: `<div style="background-color: #0088ff; width: 14px; height: 14px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>`,
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+      });
+
+      this.playerMarker = L.marker([latitude, longitude], { 
+        icon: playerIcon,
+        zIndexOffset: 1000 // Ensure player marker is above other markers
+      }).addTo(this.map);
+      
+      // Bind a popup to the marker showing "You are here"
+      this.playerMarker.bindPopup("You are here");
+    } else {
+      this.playerMarker.setLatLng([latitude, longitude]);
+    }
+
+    // Center the map on the player's position while maintaining zoom level
+    this.map.setView([latitude, longitude], this.map.getZoom() || 16, {
+      animate: true,
+      duration: 0.5
+    });
+
+    // Update boundary circle if needed
     this.updateMapView();
   }
 
@@ -182,32 +235,9 @@ export class MapOverlay {
    */
   private updateMapView(): void {
     if (!this.map || !this.lastPosition) return;
-    
-    const { latitude, longitude, accuracy } = this.lastPosition;
-    
-    // Create or update player marker
-    if (!this.playerMarker) {
-      this.playerMarker = L.marker([latitude, longitude]).addTo(this.map);
-    } else {
-      this.playerMarker.setLatLng([latitude, longitude]);
-    }
-    
-    // Create or update accuracy circle
-    if (accuracy && GameConfig.map.features.showAccuracyRadius) {
-      if (!this.accuracyCircle) {
-        this.accuracyCircle = L.circle([latitude, longitude], {
-          radius: accuracy,
-          color: '#3388ff',
-          fillColor: '#3388ff',
-          fillOpacity: 0.2,
-          weight: 1
-        }).addTo(this.map);
-      } else {
-        this.accuracyCircle.setLatLng([latitude, longitude]);
-        this.accuracyCircle.setRadius(accuracy);
-      }
-    }
-    
+
+    const { latitude, longitude } = this.lastPosition;
+
     // Only update boundary circle if not fixed to New York
     if (!this.fixedBoundaryLocation) {
       // Update boundary circle position if it exists, otherwise create it
@@ -216,36 +246,23 @@ export class MapOverlay {
       } else {
         this.boundaryCircle = L.circle([latitude, longitude], {
           radius: this.BOUNDARY_RADIUS,
-          color: '#ff3300',
-          fillColor: '#ff3300',
+          color: "#ff3300",
+          fillColor: "#ff3300",
           fillOpacity: 0.1,
           weight: 2,
-          dashArray: '5, 10'
+          dashArray: "5, 10",
         }).addTo(this.map);
       }
     } else if (!this.boundaryCircle && this.map) {
       // If we have a fixed location but no boundary circle yet, create it
       this.boundaryCircle = L.circle(this.fixedBoundaryLocation, {
         radius: this.BOUNDARY_RADIUS,
-        color: '#ff3300',
-        fillColor: '#ff3300',
+        color: "#ff3300",
+        fillColor: "#ff3300",
         fillOpacity: 0.1,
         weight: 2,
-        dashArray: '5, 10'
+        dashArray: "5, 10",
       }).addTo(this.map);
-    }
-    
-    // Center map on player with fixed zoom level
-    this.map.setView([latitude, longitude], this.MAP_ZOOM_LEVEL, {
-      animate: true,
-      duration: 0.5
-    });
-    
-    // Allow manual zooming by user instead of forcing fixed zoom
-    // Only reset zoom if it drops below our minimum preferred level
-    const currentZoom = this.map.getZoom();
-    if (currentZoom < this.MAP_ZOOM_LEVEL - 2) {
-      this.map.setZoom(this.MAP_ZOOM_LEVEL);
     }
   }
 
@@ -254,35 +271,39 @@ export class MapOverlay {
    */
   private addPointsOfInterest(): void {
     if (!this.map || !GameConfig.map.features.showPointsOfInterest) return;
-    
+
     // Clear existing markers
-    this.poiMarkers.forEach(marker => marker.remove());
+    for (const marker of this.poiMarkers.values()) {
+      marker.remove();
+    }
     this.poiMarkers.clear();
-    
+
     // Add each point of interest
-    this.pointsOfInterest.forEach(poi => {
+    for (const poi of this.pointsOfInterest) {
       // Create custom icon based on POI type
       const icon = this.createPoiIcon(poi.type);
-      
+
       // Create marker
-      const marker = L.marker([poi.latitude, poi.longitude], { icon }).addTo(this.map!);
-      
+      const marker = L.marker([poi.latitude, poi.longitude], { icon }).addTo(
+        this.map!,
+      );
+
       // Add popup with info
       marker.bindPopup(`<b>${poi.name}</b><br>Type: ${poi.type}`);
-      
+
       // Add to tracking array
       this.poiMarkers.set(poi.name, marker);
-      
+
       // Add influence radius if specified
       if (poi.radius) {
         L.circle([poi.latitude, poi.longitude], {
           radius: poi.radius,
           color: this.getPoiColor(poi.type),
           fillOpacity: 0.1,
-          weight: 1
+          weight: 1,
         }).addTo(this.map!);
       }
-    });
+    }
   }
 
   /**
@@ -291,12 +312,12 @@ export class MapOverlay {
    */
   private createPoiIcon(type: string): L.DivIcon {
     const color = this.getPoiColor(type);
-    
+
     return L.divIcon({
-      className: 'custom-poi-icon',
+      className: "custom-poi-icon",
       html: `<div style="background-color: ${color}; width: 10px; height: 10px; border-radius: 50%; border: 2px solid white;"></div>`,
       iconSize: [14, 14],
-      iconAnchor: [7, 7]
+      iconAnchor: [7, 7],
     });
   }
 
@@ -305,12 +326,18 @@ export class MapOverlay {
    */
   private getPoiColor(type: string): string {
     switch (type.toLowerCase()) {
-      case 'city': return '#ff4444';
-      case 'beach': return '#44aaff';
-      case 'forest': return '#44ff44';
-      case 'mountain': return '#aa7744';
-      case 'landmark': return '#ffaa44';
-      default: return '#aa44ff';
+      case "city":
+        return "#ff4444";
+      case "beach":
+        return "#44aaff";
+      case "forest":
+        return "#44ff44";
+      case "mountain":
+        return "#aa7744";
+      case "landmark":
+        return "#ffaa44";
+      default:
+        return "#aa44ff";
     }
   }
 
@@ -319,17 +346,17 @@ export class MapOverlay {
    */
   private drawGrid(): void {
     if (!this.map || !this.gridLayer) return;
-    
+
     // Clear existing grid
     this.gridLayer.clearLayers();
-    
+
     // Get map bounds
     const bounds = this.map.getBounds();
     const north = bounds.getNorth();
     const south = bounds.getSouth();
     const east = bounds.getEast();
     const west = bounds.getWest();
-    
+
     // Calculate cell size in degrees (approximate)
     // For more accuracy, we'd need to account for the Earth's curvature
     const cellSizeMeters = GameConfig.map.cellSizeMeters;
@@ -337,51 +364,67 @@ export class MapOverlay {
     const latCellSize = cellSizeMeters / 111000;
     // 1 degree of longitude varies with latitude
     const midLat = (north + south) / 2;
-    const lonCellSize = cellSizeMeters / (111000 * Math.cos(midLat * Math.PI / 180));
-    
+    const lonCellSize =
+      cellSizeMeters / (111000 * Math.cos((midLat * Math.PI) / 180));
+
     // Draw latitude lines
     let lat = Math.floor(south / latCellSize) * latCellSize;
     while (lat <= north) {
-      L.polyline([[lat, west], [lat, east]], {
-        color: '#555555',
-        weight: 0.5,
-        opacity: 0.5,
-        dashArray: '5,5'
-      }).addTo(this.gridLayer);
+      L.polyline(
+        [
+          [lat, west],
+          [lat, east],
+        ],
+        {
+          color: "#555555",
+          weight: 0.5,
+          opacity: 0.5,
+          dashArray: "5,5",
+        },
+      ).addTo(this.gridLayer);
       lat += latCellSize;
     }
-    
+
     // Draw longitude lines
     let lon = Math.floor(west / lonCellSize) * lonCellSize;
     while (lon <= east) {
-      L.polyline([[south, lon], [north, lon]], {
-        color: '#555555',
-        weight: 0.5,
-        opacity: 0.5,
-        dashArray: '5,5'
-      }).addTo(this.gridLayer);
+      L.polyline(
+        [
+          [south, lon],
+          [north, lon],
+        ],
+        {
+          color: "#555555",
+          weight: 0.5,
+          opacity: 0.5,
+          dashArray: "5,5",
+        },
+      ).addTo(this.gridLayer);
       lon += lonCellSize;
     }
-    
+
     // If we have a player position, highlight their current cell
     if (this.lastPosition) {
       const { latitude, longitude } = this.lastPosition;
-      
+
       // Calculate cell boundaries
       const cellLatBase = Math.floor(latitude / latCellSize) * latCellSize;
       const cellLonBase = Math.floor(longitude / lonCellSize) * lonCellSize;
-      
+
       // Draw current cell with different style
       L.rectangle(
-        [[cellLatBase, cellLonBase], [cellLatBase + latCellSize, cellLonBase + lonCellSize]],
+        [
+          [cellLatBase, cellLonBase],
+          [cellLatBase + latCellSize, cellLonBase + lonCellSize],
+        ],
         {
-          color: '#ff0000',
+          color: "#ff0000",
           weight: 2,
           opacity: 0.7,
           fillOpacity: 0.1,
-          fillColor: '#ff0000',
-          dashArray: '5,5'
-        }
+          fillColor: "#ff0000",
+          dashArray: "5,5",
+        },
       ).addTo(this.gridLayer);
     }
   }
@@ -389,9 +432,14 @@ export class MapOverlay {
   /**
    * Add a custom point to the map
    */
-  addCustomPoint(name: string, latitude: number, longitude: number, type: string = 'custom'): void {
+  addCustomPoint(
+    name: string,
+    latitude: number,
+    longitude: number,
+    type = "custom",
+  ): void {
     if (!this.map) return;
-    
+
     const icon = this.createPoiIcon(type);
     const marker = L.marker([latitude, longitude], { icon }).addTo(this.map);
     marker.bindPopup(`<b>${name}</b>`);
@@ -406,28 +454,12 @@ export class MapOverlay {
       this.map.remove();
       this.map = null;
     }
-    
-    if (this.container && this.container.parentNode) {
+
+    if (this.container?.parentNode) {
       this.container.parentNode.removeChild(this.container);
     }
   }
 
-  /**
-   * Initialize the POI service and set up event listeners
-   */
-  private async initializePoiService(): Promise<void> {
-    try {
-      // Initialize the service and load initial POIs
-      await this.poiService.initialize();
-      
-      // Set up listeners for POI updates
-      this.poiService.onPoiUpdated(this.handlePoiUpdated.bind(this));
-      this.poiService.onPoisLoaded(this.handlePoisLoaded.bind(this));
-    } catch (error) {
-      console.error('Failed to initialize POI service:', error);
-    }
-  }
-  
   /**
    * Handle when a single POI is updated
    */
@@ -440,7 +472,7 @@ export class MapOverlay {
         if (marker) {
           // Update marker position
           marker.setLatLng([poi.latitude, poi.longitude]);
-          
+
           // Update popup content
           const popup = marker.getPopup();
           if (popup) {
@@ -448,7 +480,7 @@ export class MapOverlay {
           } else {
             marker.bindPopup(this.createPoiPopupContent(poi));
           }
-          
+
           // Update icon if POI type changed
           marker.setIcon(this.createPoiIcon(poi.type));
         }
@@ -458,7 +490,7 @@ export class MapOverlay {
       }
     }
   }
-  
+
   /**
    * Handle when all POIs are loaded
    */
@@ -466,48 +498,48 @@ export class MapOverlay {
     if (this.map && this.isVisible) {
       // Clear existing markers
       this.clearPoiMarkers();
-      
+
       // Add markers for all POIs
-      pois.forEach(poi => {
+      for (const poi of pois) {
         this.addPoiMarker(poi);
-      });
-      
+      }
+
       // Fit map to bounds of all POIs
       this.fitMapToPois(pois);
     }
   }
-  
+
   /**
    * Add a marker for a POI
    */
   private addPoiMarker(poi: PointOfInterest): void {
     if (!this.map) return;
-    
+
     const { latitude, longitude, name, type, id } = poi;
-    
+
     // Create icon based on POI type
     const icon = this.createPoiIcon(type);
-    
+
     // Create marker
     const marker = L.marker([latitude, longitude], { icon }).addTo(this.map);
-    
+
     // Create popup content
     const popupContent = this.createPoiPopupContent(poi);
     marker.bindPopup(popupContent);
-    
+
     // Store marker
     this.poiMarkers.set(id, marker);
-    
+
     // Add click handler for interactive POIs
     if (poi.interactable && this.poiClickListener) {
-      marker.on('click', () => {
+      marker.on("click", () => {
         if (this.poiClickListener) {
           this.poiClickListener(poi);
         }
       });
     }
   }
-  
+
   /**
    * Create popup content for a POI
    */
@@ -515,101 +547,54 @@ export class MapOverlay {
     let content = `<div class="poi-popup">
       <h3>${poi.name}</h3>
       <p>${poi.description}</p>`;
-      
+
     if (poi.visited) {
       content += `<p class="visited">✓ Visited</p>`;
     }
-    
+
     if (poi.interactable) {
       content += `<p class="interactable">Click to interact</p>`;
     }
-    
-    content += `</div>`;
-    
+
+    content += "</div>";
+
     return content;
   }
-  
-  /**
-   * Update POIs displayed on map based on player position
-   */
-  private updateNearbyPois(latitude: number, longitude: number): void {
-    // Get POIs within a certain radius
-    const nearbyPois = this.poiService.getPoisNearLocation(latitude, longitude, 5); // 5km radius
-    
-    // Update distance info for each POI marker
-    nearbyPois.forEach(poi => {
-      const marker = this.poiMarkers.get(poi.name);
-      if (marker) {
-        // Update popup content with distance
-        marker.bindPopup(this.createPoiPopupContent(poi));
-      }
-    });
-  }
-  
-  /**
-   * Load and display POIs that are visible in the current map view
-   */
-  private loadVisiblePois(): void {
-    if (!this.map || !this.isVisible) return;
-    
-    // Get all POIs from service
-    const allPois = this.poiService.getAllPois();
-    
-    // Clear existing markers
-    this.clearPoiMarkers();
-    
-    // Add markers for all POIs
-    allPois.forEach(poi => {
-      // Only add POIs that have been discovered or are always visible
-      if (poi.discovered || poi.type === 'city') {
-        this.addPoiMarker(poi);
-      }
-    });
-    
-    // Fit map to bounds of shown POIs
-    this.fitMapToPois(allPois.filter(p => p.discovered || p.type === 'city'));
-  }
-  
+
   /**
    * Adjust the map view to fit all POIs
    */
   private fitMapToPois(pois: PointOfInterest[]): void {
     if (!this.map || pois.length === 0) return;
-    
+
     // Create a bounds object
-    let bounds = L.latLngBounds([]);
-    
+    const bounds = L.latLngBounds([]);
+
     // Add all POI positions to the bounds
-    pois.forEach(poi => {
+    for (const poi of pois) {
       bounds.extend([poi.latitude, poi.longitude]);
-    });
-    
+    }
+
     // If player marker exists, include it in the bounds
     if (this.playerMarker) {
       bounds.extend(this.playerMarker.getLatLng());
     }
-    
-    // Set a maximum zoom level to ensure proper zooming
-    this.map.fitBounds(bounds, {
-      padding: [30, 30],
-      maxZoom: 19 // Increased from 15 to 19
-    });
-    
+
     // Store the bounding box for later reference
     this.boundingBox = bounds;
   }
-  
+
   /**
    * Clear all POI markers from the map
    */
   private clearPoiMarkers(): void {
     if (!this.map) return;
-    
+
     // Remove all markers from the map
-    this.poiMarkers.forEach(marker => {
+    for (const marker of this.poiMarkers.values()) {
       marker.remove();
-    });
-    
+    }
+
     // Clear the markers map
     this.poiMarkers.clear();
   }
@@ -617,33 +602,40 @@ export class MapOverlay {
   /**
    * Draw a grid cell on the map
    */
-  public drawGridCell(topLeft: [number, number], bottomRight: [number, number], color: string = 'rgba(255, 0, 0, 0.2)'): void {
+  public drawGridCell(
+    topLeft: [number, number],
+    bottomRight: [number, number],
+    color = "rgba(255, 0, 0, 0.2)",
+  ): void {
     if (!this.map || !this.gridLayer) return;
-    
+
     // Create a rectangle
-    const rectangle = L.rectangle([
-      [topLeft[0], topLeft[1]],
-      [bottomRight[0], bottomRight[1]]
-    ], {
-      color: color,
-      weight: 1,
-      fillOpacity: 0.2
-    });
-    
+    const rectangle = L.rectangle(
+      [
+        [topLeft[0], topLeft[1]],
+        [bottomRight[0], bottomRight[1]],
+      ],
+      {
+        color: color,
+        weight: 1,
+        fillOpacity: 0.2,
+      },
+    );
+
     // Add to grid layer
     this.gridLayer.addLayer(rectangle);
   }
-  
+
   /**
    * Clear all grid cells
    */
   public clearGridCells(): void {
     if (!this.gridLayer) return;
-    
+
     // Clear all layers
     this.gridLayer.clearLayers();
   }
-  
+
   /**
    * Set a handler for POI click events
    */
@@ -657,4 +649,51 @@ export class MapOverlay {
   public getVisibility(): boolean {
     return true; // Always return true as it's always visible
   }
-} 
+
+  /**
+   * Set the Phaser layer system to integrate with
+   * This allows MapOverlay to coordinate with Phaser's rendering layers
+   */
+  setPhaserLayers(layers: PhaserLayers): void {
+    this.phaserLayers = layers;
+
+    // Update visibility based on layers
+    if (this.phaserLayers && this.container) {
+      // Make sure the map container has the correct z-index
+      this.container.style.zIndex = "0";
+
+      // Ensure the container is positioned correctly
+      this.container.style.visibility = "visible";
+      this.container.style.display = "block";
+
+      // Find the canvas again to make sure the map is correctly positioned
+      const canvas = document.querySelector("canvas");
+      if (canvas?.parentNode) {
+        // Insert the map container right before the canvas in the DOM
+        canvas.parentNode.insertBefore(this.container, canvas);
+      }
+    }
+  }
+
+  /**
+   * Initialize POI Service for POI data
+   */
+  private initializePoiService(): void {
+    // If we have a poiService, set up event listeners
+    // but don't automatically load POIs - that will be handled by GameUI
+    if (this.poiService) {
+      // Listen for POI updates (this will trigger when POIs are discovered)
+      this.poiService.onPoiUpdated((poi) => {
+        if (poi.discovered || poi.type === "city") {
+          // Update or add the POI marker
+          this.addCustomPoint(poi.name, poi.latitude, poi.longitude, poi.type);
+        }
+      });
+
+      // If we have a callback for when POIs are loaded, call it
+      if (this.onRefreshCallback) {
+        this.onRefreshCallback();
+      }
+    }
+  }
+}

@@ -17,7 +17,7 @@ export class Button {
     // Create the button element
     this.element = document.createElement('button');
     this.element.textContent = text;
-    this.element.className = 'game-button ' + (options.className || '');
+    this.element.className = `game-button ${options.className || ''}`;
     
     // Style the button
     this.element.style.position = 'absolute';
@@ -64,6 +64,10 @@ export class Button {
   setPosition(x: number, y: number): void {
     this.element.style.left = `${x}px`;
     this.element.style.top = `${y}px`;
+  }
+  
+  getElement(): HTMLButtonElement {
+    return this.element;
   }
   
   disable(): void {

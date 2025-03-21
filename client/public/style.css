@@ -48,7 +48,7 @@ canvas {
     width: 100% !important;
     height: 100% !important;
     z-index: 1;
-    pointer-events: none; /* Allows clicking through to Leaflet map */
+    pointer-events: auto; /* Changed from 'none' to 'auto' to allow clicks on Phaser elements */
 }
 
 /* Make specific Phaser UI elements clickable */
@@ -139,6 +139,23 @@ canvas {
 .poi-popup .interactable {
     color: #e67e22;
     font-weight: bold;
+}
+
+/* Player marker styling */
+.player-marker {
+    z-index: 1000 !important; /* Ensure player marker is on top */
+}
+
+.player-marker div {
+    transform: scale(1.2); /* Make the player marker slightly larger */
+    box-shadow: 0 0 0 4px rgba(0, 136, 255, 0.4), 0 0 8px rgba(0, 0, 0, 0.6) !important; /* Add a glow effect */
+    animation: pulse 1.5s infinite; /* Add pulsing animation */
+}
+
+@keyframes pulse {
+    0% { transform: scale(1.2); }
+    50% { transform: scale(1.5); }
+    100% { transform: scale(1.2); }
 }
 
 /* Phaser UI containers should be clickable */

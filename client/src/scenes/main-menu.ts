@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { logger, LogCategory } from "../utils/logger";
 
 export class MainMenu extends Phaser.Scene {
   constructor() {
@@ -44,7 +45,7 @@ export class MainMenu extends Phaser.Scene {
     const guestId = `guest_${Math.floor(Math.random() * 10000)}`;
     localStorage.setItem("userId", guestId);
 
-    console.log("Starting game with guest ID:", guestId);
+    logger.info(LogCategory.GAME, `Starting game with guest ID: ${guestId}`);
     this.scene.start("Game");
   }
 }

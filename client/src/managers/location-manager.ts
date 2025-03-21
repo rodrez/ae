@@ -22,14 +22,16 @@ export class LocationManager {
   private debugMarker?: Phaser.GameObjects.Graphics;
   private debugText?: Phaser.GameObjects.Text;
   private playerId: string = "";
-  private onPositionUpdateCallback: ((position: GeoPosition) => void) | null = null;
-  private onManualControlsChangedCallback: ((enabled: boolean) => void) | null = null;
+  private onPositionUpdateCallback: ((position: GeoPosition) => void) | null =
+    null;
+  private onManualControlsChangedCallback: ((enabled: boolean) => void) | null =
+    null;
 
   constructor(scene: Phaser.Scene, worldService: WorldService) {
     this.scene = scene;
     this.worldService = worldService;
     this.geoService = new GeolocationService();
-    
+
     // Initialize GeoMapper with default config
     this.geoMapper = new GeoMapper({
       originLatitude: GameConfig.map.originLatitude,
@@ -37,7 +39,7 @@ export class LocationManager {
       boundaryLatitude: GameConfig.map.boundaryLatitude,
       boundaryLongitude: GameConfig.map.boundaryLongitude,
       worldWidth: GameConfig.worldWidth,
-      worldHeight: GameConfig.worldHeight
+      worldHeight: GameConfig.worldHeight,
     });
   }
 
@@ -46,7 +48,7 @@ export class LocationManager {
    */
   public initialize(playerId: string): void {
     this.playerId = playerId;
-    
+
     // Create location status indicator
     this.createLocationStatusIndicator();
   }
@@ -59,23 +61,23 @@ export class LocationManager {
     if (this.useGeolocation) {
       this.geoService.stopTracking();
     }
-    
+
     // Clean up UI elements
     if (this.locationStatusIndicator) {
       this.locationStatusIndicator.destroy();
       this.locationStatusIndicator = undefined;
     }
-    
+
     if (this.locationErrorText) {
       this.locationErrorText.destroy();
       this.locationErrorText = undefined;
     }
-    
+
     if (this.debugMarker) {
       this.debugMarker.destroy();
       this.debugMarker = undefined;
     }
-    
+
     if (this.debugText) {
       this.debugText.destroy();
       this.debugText = undefined;
@@ -87,10 +89,11 @@ export class LocationManager {
    */
   public update(delta: number): void {
     if (!this.useGeolocation || this.manualControls) return;
-    
+
     // Update timer for periodic position updates
     this.updatePositionTimer += delta;
-    if (this.updatePositionTimer >= 5000) { // Send every 5 seconds
+    if (this.updatePositionTimer >= 5000) {
+      // Send every 5 seconds
       if (this.lastGeoPosition) {
         this.updatePlayerPosition();
       }
@@ -107,30 +110,32 @@ export class LocationManager {
       this.setManualControls(true);
       return;
     }
-    
+
     try {
       // Request location permission and start tracking
       const position = await this.geoService.startTracking();
-      
+
       // Convert browser position to our format and update
       this.handleLocationUpdate(position);
-      
+
       // Set up event listeners for future updates without sending last position again
-      this.geoService.onLocationUpdate(this.handleLocationUpdate.bind(this), false);
+      this.geoService.onLocationUpdate(
+        this.handleLocationUpdate.bind(this),
+        false,
+      );
       this.geoService.onLocationError(this.handleLocationError.bind(this));
-      
+
       // Update location status indicator
       this.updateLocationStatusIndicator(true);
-      
     } catch (error) {
       console.error("Geolocation error:", error);
-      
+
       // Show error message
       this.handleLocationError(error as GeolocationPositionError);
-      
+
       // Update location status indicator
       this.updateLocationStatusIndicator(false);
-      
+
       // Fall back to manual controls
       this.setManualControls(true);
     }
@@ -141,9 +146,9 @@ export class LocationManager {
    */
   public setUseGeolocation(enabled: boolean): void {
     if (this.useGeolocation === enabled) return;
-    
+
     this.useGeolocation = enabled;
-    
+
     if (enabled) {
       this.startLocationTracking();
     } else {
@@ -157,7 +162,7 @@ export class LocationManager {
    */
   public setManualControls(enabled: boolean): void {
     this.manualControls = enabled;
-    
+
     // Notify callback if registered
     if (this.onManualControlsChangedCallback) {
       this.onManualControlsChangedCallback(enabled);
@@ -190,11 +195,18 @@ export class LocationManager {
    * @param callback The function to call when position is updated
    * @param sendLastPosition Whether to immediately send the last known position (defaults to false)
    */
-  public onPositionUpdate(callback: (position: GeoPosition) => void, sendLastPosition: boolean = false): void {
+  public onPositionUpdate(
+    callback: (position: GeoPosition) => void,
+    sendLastPosition: boolean = false,
+  ): void {
     this.onPositionUpdateCallback = callback;
-    
+
     // If we already have a position and sendLastPosition is true, send it immediately
-    if (sendLastPosition && this.lastGeoPosition && this.onPositionUpdateCallback) {
+    if (
+      sendLastPosition &&
+      this.lastGeoPosition &&
+      this.onPositionUpdateCallback
+    ) {
       this.onPositionUpdateCallback(this.lastGeoPosition);
     }
   }
@@ -211,21 +223,22 @@ export class LocationManager {
    */
   private handleLocationUpdate(position: GeolocationPosition): void {
     // Convert browser position to our format
-    this.lastGeoPosition = this.geoMapper.browserPositionToGeoPosition(position);
-    
+    this.lastGeoPosition =
+      this.geoMapper.browserPositionToGeoPosition(position);
+
     // Check if position is within map boundaries
     const isInBounds = this.geoMapper.isWithinBoundaries(
-      this.lastGeoPosition.latitude, 
-      this.lastGeoPosition.longitude
+      this.lastGeoPosition.latitude,
+      this.lastGeoPosition.longitude,
     );
-    
+
     if (!isInBounds) {
       console.warn("Player location is outside map boundaries");
     }
-    
+
     // Update debug marker if enabled
     this.updateDebugInfo();
-    
+
     // Notify position update callback
     if (this.onPositionUpdateCallback) {
       this.onPositionUpdateCallback(this.lastGeoPosition);
@@ -237,9 +250,9 @@ export class LocationManager {
    */
   private handleLocationError(error: GeolocationPositionError): void {
     console.error("Location error:", error);
-    
+
     let errorMessage = "Location error: ";
-    
+
     switch (error.code) {
       case error.PERMISSION_DENIED:
         errorMessage += "Permission denied. Please enable location services.";
@@ -253,14 +266,14 @@ export class LocationManager {
       default:
         errorMessage += error.message || "Unknown error";
     }
-    
+
     // Show error message
     this.showLocationError(errorMessage);
-    
+
     // Enable manual controls so the player can move around
     this.setManualControls(true);
   }
-  
+
   /**
    * Show location error message on screen
    */
@@ -280,11 +293,11 @@ export class LocationManager {
         .setDepth(1000)
         .setVisible(false);
     }
-    
+
     // Update and show the error message
     this.locationErrorText.setText(message);
     this.locationErrorText.setVisible(true);
-    
+
     // Hide after 5 seconds
     this.scene.time.delayedCall(5000, () => {
       if (this.locationErrorText) {
@@ -301,7 +314,9 @@ export class LocationManager {
     this.locationStatusIndicator = this.scene.add.container(1240, 50);
 
     // Add background
-    const bg = this.scene.add.rectangle(0, 0, 20, 20, 0x000000, 0.6).setOrigin(0.5);
+    const bg = this.scene.add
+      .rectangle(0, 0, 20, 20, 0x000000, 0.6)
+      .setOrigin(0.5);
 
     // Add status circle (initial color is yellow for unknown)
     const circle = this.scene.add.circle(0, 0, 6, 0xffff00).setOrigin(0.5);
@@ -323,15 +338,19 @@ export class LocationManager {
     // Set depth to always appear on top
     this.locationStatusIndicator.setDepth(1000);
   }
-  
+
   /**
    * Update the location status indicator based on current status
    */
   private updateLocationStatusIndicator(isActive: boolean): void {
     if (!this.locationStatusIndicator) return;
 
-    const circle = this.locationStatusIndicator.getAt(1) as Phaser.GameObjects.Arc;
-    const label = this.locationStatusIndicator.getAt(2) as Phaser.GameObjects.Text;
+    const circle = this.locationStatusIndicator.getAt(
+      1,
+    ) as Phaser.GameObjects.Arc;
+    const label = this.locationStatusIndicator.getAt(
+      2,
+    ) as Phaser.GameObjects.Text;
 
     if (!circle || !label) return;
 
@@ -344,19 +363,19 @@ export class LocationManager {
       label.setText("GPS Inactive");
     }
   }
-  
+
   /**
    * Create debug visualization for location data
    */
   private updateDebugInfo(): void {
-    // Check if debug is enabled in GameConfig 
+    // Check if debug is enabled in GameConfig
     if (!this.lastGeoPosition || !GameConfig.debug) return;
-    
+
     // Create debug marker if it doesn't exist
     if (!this.debugMarker) {
       this.debugMarker = this.scene.add.graphics();
       this.debugMarker.setDepth(100);
-      
+
       // Add debug text
       this.debugText = this.scene.add.text(0, 0, "", {
         fontSize: "10px",
@@ -366,53 +385,29 @@ export class LocationManager {
       });
       this.debugText.setDepth(101);
     }
-    
+
     // Clear previous graphics
     this.debugMarker.clear();
-    
-    // Draw accuracy circle
-    if (this.lastGeoPosition.accuracy) {
-      // Convert accuracy from meters to game units
-      // This is approximate - would need proper scaling based on your map
-      const accuracyRadius = this.lastGeoPosition.accuracy / 10; // Example scaling
-      
-      // Draw semi-transparent circle
-      this.debugMarker.fillStyle(0x0088ff, 0.2);
-      this.debugMarker.fillCircle(
-        this.lastGeoPosition.x, 
-        this.lastGeoPosition.y, 
-        accuracyRadius
-      );
-      
-      // Draw outline
-      this.debugMarker.lineStyle(1, 0x0088ff, 0.8);
-      this.debugMarker.strokeCircle(
-        this.lastGeoPosition.x, 
-        this.lastGeoPosition.y, 
-        accuracyRadius
-      );
-    }
-    
+
     // Draw point at exact location
     this.debugMarker.fillStyle(0x0088ff, 1);
     this.debugMarker.fillCircle(
-      this.lastGeoPosition.x, 
-      this.lastGeoPosition.y, 
-      5
+      this.lastGeoPosition.x,
+      this.lastGeoPosition.y,
+      5,
     );
-    
+
     // Update debug text
     if (this.debugText) {
       this.debugText.setText(
         `Lat: ${this.lastGeoPosition.latitude.toFixed(6)}\n` +
-        `Lng: ${this.lastGeoPosition.longitude.toFixed(6)}\n` +
-        `Acc: ${this.lastGeoPosition.accuracy?.toFixed(1)}m\n` +
-        `X: ${Math.round(this.lastGeoPosition.x)}\n` +
-        `Y: ${Math.round(this.lastGeoPosition.y)}`
+          `Lng: ${this.lastGeoPosition.longitude.toFixed(6)}\n` +
+          `X: ${Math.round(this.lastGeoPosition.x)}\n` +
+          `Y: ${Math.round(this.lastGeoPosition.y)}`,
       );
       this.debugText.setPosition(
         this.lastGeoPosition.x + 10,
-        this.lastGeoPosition.y - 30
+        this.lastGeoPosition.y - 30,
       );
     }
   }
@@ -427,7 +422,7 @@ export class LocationManager {
       // Call updatePlayerPosition with x and y coordinates
       await this.worldService.updatePlayerPosition(
         this.lastGeoPosition.x,
-        this.lastGeoPosition.y
+        this.lastGeoPosition.y,
       );
     } catch (error) {
       console.error("Failed to update position:", error);
@@ -444,16 +439,16 @@ export class LocationManager {
       coords: {
         latitude: GameConfig.map.defaultCenter.lat,
         longitude: GameConfig.map.defaultCenter.lng,
-        accuracy: 10,
-        altitude: null,
-        altitudeAccuracy: null,
         heading: null,
-        speed: null
+        speed: null,
       },
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
-    
+
     // Process the default position as if it came from geolocation
-    this.handleLocationUpdate(defaultPosition as unknown as GeolocationPosition);
+    this.handleLocationUpdate(
+      defaultPosition as unknown as GeolocationPosition,
+    );
   }
-} 
+}
+
